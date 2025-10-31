@@ -60,21 +60,26 @@ class MainWindow(QtWidgets.QDialog):
 
 	def pushButton_playrandomplaylist_run(self):
 		
-		self.url = QUrl
-		with open(self.randomplaylist, 'r') as fin:
-			lines = fin.readlines()
-			fin.close()
-			
-		for _line in lines:
-			line = os.path.join(os.getcwd(), _line.strip())
-			self.playlist.addMedia(QMediaContent(self.url.fromLocalFile(line)))
-
-		self.playlist.setCurrentIndex(0) ### TODO: save/load index from config
-		self.player.setPlaylist(self.playlist)
-		self.player.setVolume(50)
-		# print(str(self.player.state()))
 		if self.player.state() != QMediaPlayer.PlayingState:
+			if bDebug:
+				print(str(self.player.state()))
+			self.url = QUrl
+			with open(self.randomplaylist, 'r') as fin:
+				lines = fin.readlines()
+				fin.close()
+				
+			for _line in lines:
+				line = os.path.join(os.getcwd(), _line.strip())
+				self.playlist.addMedia(QMediaContent(self.url.fromLocalFile(line)))
+
+			self.playlist.setCurrentIndex(0) ### TODO: save/load index from config
+			self.player.setPlaylist(self.playlist)
+			self.player.setVolume(50)
 			self.player.play()
+		else:
+			if bDebug:
+				print(str(self.player.state()))
+			print('already playing')
 
 	def pushButton_genrandomplaylist_run(self):
 		plgen = PlaylistGenerator()
