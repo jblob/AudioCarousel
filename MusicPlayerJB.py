@@ -57,10 +57,15 @@ class MainWindow(QtWidgets.QDialog):
 		# connect signals and slots
 		self.pushButton_playrandomplaylist.clicked.connect(self.pushButton_playrandomplaylist_run)
 		self.pushButton_genrandomplaylist.clicked.connect(self.pushButton_genrandomplaylist_run)
+		self.pushButton_randomplayerstop.clicked.connect(self.pushButton_randomplayerstop_run)
+		self.pushButton_randomplaypause.clicked.connect(self.pushButton_randomplaypause_run)
 
 	def pushButton_playrandomplaylist_run(self):
-		
-		if self.player.state() != QMediaPlayer.PlayingState:
+		if self.player.state() == QMediaPlayer.PlayingState:
+			if bDebug:
+				print(str(self.player.state()))
+			print('already playing')
+		elif self.player.state() == QMediaPlayer.StoppedState:
 			if bDebug:
 				print(str(self.player.state()))
 			self.url = QUrl
@@ -76,15 +81,29 @@ class MainWindow(QtWidgets.QDialog):
 			self.player.setPlaylist(self.playlist)
 			self.player.setVolume(50)
 			self.player.play()
-		else:
-			if bDebug:
-				print(str(self.player.state()))
-			print('already playing')
+		elif self.player.state() == QMediaPlayer.PausedState:
+			self.player.play()
 
 	def pushButton_genrandomplaylist_run(self):
 		plgen = PlaylistGenerator()
 		d = QFileDialog.getExistingDirectory(self, 'select Music Directory', '.', QFileDialog.Option.ShowDirsOnly)
 		plgen.genCompletePlaylistFromDirectory(d, self.randomplaylistgen, True)
+		
+	def pushButton_randomplayerstop_run(self):
+		if self.player.state() == QMediaPlayer.PlayingState:
+			self.player.stop()
+		elif self.player.state() == QMediaPlayer.StoppedState:
+			print('not playing')
+		elif self.player.state() == QMediaPlayer.PausedState:
+			self.player.stop()
+		
+	def pushButton_randomplaypause_run(self):
+		if self.player.state() == QMediaPlayer.PlayingState:
+			self.player.pause()
+		elif self.player.state() == QMediaPlayer.StoppedState:
+			print('not playing')
+		elif self.player.state() == QMediaPlayer.PausedState:
+			print('already paused')
 
 if __name__ == '__main__':
 	app = QtWidgets.QApplication(sys.argv)

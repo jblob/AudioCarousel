@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1017</width>
-    <height>598</height>
+    <width>1013</width>
+    <height>589</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -121,7 +121,7 @@
     <rect>
      <x>20</x>
      <y>60</y>
-     <width>287</width>
+     <width>333</width>
      <height>166</height>
     </rect>
    </property>
@@ -147,14 +147,14 @@
      </widget>
     </item>
     <item>
-     <widget class="QPushButton" name="pushButton_3">
+     <widget class="QPushButton" name="pushButton_randomplaypause">
       <property name="text">
        <string>pause</string>
       </property>
      </widget>
     </item>
     <item>
-     <widget class="QPushButton" name="pushButton_4">
+     <widget class="QPushButton" name="pushButton_randomplayerstop">
       <property name="text">
        <string>stop</string>
       </property>
@@ -175,7 +175,7 @@
      <x>20</x>
      <y>480</y>
      <width>321</width>
-     <height>71</height>
+     <height>77</height>
     </rect>
    </property>
    <layout class="QGridLayout" name="gridLayout">
