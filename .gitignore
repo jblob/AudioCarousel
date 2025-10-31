@@ -1,5 +1,10 @@
 # tempfiles
 /z.py
+/MusicPlayerJB_working.py
+/*.mp3
+/*.mp4
+/*.mpg
+/*.m3u
 
 # VS Code
 /.vscode/settings.json
