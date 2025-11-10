@@ -56,18 +56,20 @@ class MainWindow(QtWidgets.QDialog):
 
 		# connect signals and slots
 		self.pushButton_genrandomplaylist.clicked.connect(self.pushButton_genrandomplaylist_run)
-		self.pushButton_playrandomplaylist.clicked.connect(self.pushButton_playrandomplaylist_run)
-		self.pushButton_randomplayerstop.clicked.connect(self.pushButton_randomplayerstop_run)
-		self.pushButton_randomplaypause.clicked.connect(self.pushButton_randomplaypause_run)
-		self.pushButton_randomplayprev.clicked.connect(self.pushButton_randomplayprev_run)
-		self.pushButton_randomplaynext.clicked.connect(self.pushButton_randomplaynext_run)
+		self.pushButton_randomplaylist_play.clicked.connect(self.pushButton_randomplaylist_play_run)
+		self.pushButton_randomplaylist_pause.clicked.connect(self.pushButton_randomplaylist_pause_run)
+		self.pushButton_randomplaylist_prev.clicked.connect(self.pushButton_randomplaylist_prev_run)
+		self.pushButton_randomplaylist_next.clicked.connect(self.pushButton_randomplaylist_next_run)
+		self.pushButton_randomplaylist_stop.clicked.connect(self.pushButton_randomplaylist_stop_run)
+
+		# self.player.mediaStatusChanged.connect(self.mediaStatusChanged)
 
 	def pushButton_genrandomplaylist_run(self):
 		plgen = PlaylistGenerator()
 		d = QFileDialog.getExistingDirectory(self, 'select Music Directory', '.', QFileDialog.Option.ShowDirsOnly)
 		plgen.genCompletePlaylistFromDirectory(d, self.randomplaylistgen, True)
 		
-	def pushButton_playrandomplaylist_run(self):
+	def pushButton_randomplaylist_play_run(self):
 		if self.player.state() == QMediaPlayer.PlayingState:
 			if bDebug:
 				print(str(self.player.state()))
@@ -92,16 +94,7 @@ class MainWindow(QtWidgets.QDialog):
 		elif self.player.state() == QMediaPlayer.PausedState:
 			self.player.play()
 
-	def pushButton_randomplayerstop_run(self):
-		if self.player.state() == QMediaPlayer.PlayingState:
-			self.player.stop()
-		elif self.player.state() == QMediaPlayer.StoppedState:
-			print('not playing')
-		elif self.player.state() == QMediaPlayer.PausedState:
-			self.player.stop()
-		self.savePlaylistState(self.playlist, self.randomplaylist)
-		
-	def pushButton_randomplaypause_run(self):
+	def pushButton_randomplaylist_pause_run(self):
 		if self.player.state() == QMediaPlayer.PlayingState:
 			self.player.pause()
 		elif self.player.state() == QMediaPlayer.StoppedState:
@@ -109,22 +102,32 @@ class MainWindow(QtWidgets.QDialog):
 		elif self.player.state() == QMediaPlayer.PausedState:
 			print('already paused')
 			
-	def pushButton_randomplayprev_run(self):
-		if bDebug:
-			print('<pushButton_randomplayprev_run>')
+	def pushButton_randomplaylist_prev_run(self):
 		if self.playlist.previousIndex() == -1:
 			self.playlist.setCurrentIndex(self.playlist.mediaCount()-1)
 		else:
 			self.playlist.previous()
-		  
-	def pushButton_randomplaynext_run(self):
 		if bDebug:
-			print('<pushButton_randomplaynext_run>')
+			print('<pushButton_randomplaylist_prev_run>' + str(self.playlist.currentIndex()))
+		  
+	def pushButton_randomplaylist_next_run(self):
 		self.playlist.next()
 		if self.playlist.currentIndex() == -1:
 			self.playlist.setCurrentIndex(0)
 			self.player.play()
+		if bDebug:
+			print('<pushButton_randomplaylist_next_run>' + str(self.playlist.currentIndex()))
   
+	def pushButton_randomplaylist_stop_run(self):
+		if self.player.state() == QMediaPlayer.PlayingState:
+			self.player.stop()
+			self.savePlaylistState(self.playlist, self.randomplaylist)
+		elif self.player.state() == QMediaPlayer.StoppedState:
+			print('not playing')
+		elif self.player.state() == QMediaPlayer.PausedState:
+			self.player.stop()
+			self.savePlaylistState(self.playlist, self.randomplaylist)
+		
 	def savePlaylistState(self, playlist, playlistname):
 		if bDebug:
 			print('<savePlaylistState>' + str(playlistname))
@@ -144,6 +147,9 @@ class MainWindow(QtWidgets.QDialog):
 		f.close()
 		
 		return val
+
+	# def mediaStatusChanged(self):
+		# print('<mediaStatusChanged>' + str(self.player.mediaStatus()))
 
 	def closeEvent(self, event):
 		# function for cleaning up/saving states etc.

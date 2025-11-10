@@ -113,7 +113,7 @@
      </widget>
     </item>
     <item>
-     <widget class="QPushButton" name="pushButton_playrandomplaylist">
+     <widget class="QPushButton" name="pushButton_randomplaylist_play">
       <property name="toolTip">
        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;play the random playlist starting with the last unfinished song&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
       </property>
@@ -123,28 +123,28 @@
      </widget>
     </item>
     <item>
-     <widget class="QPushButton" name="pushButton_randomplaypause">
+     <widget class="QPushButton" name="pushButton_randomplaylist_pause">
       <property name="text">
        <string>pause</string>
       </property>
      </widget>
     </item>
     <item>
-     <widget class="QPushButton" name="pushButton_randomplayprev">
+     <widget class="QPushButton" name="pushButton_randomplaylist_prev">
       <property name="text">
        <string>prev</string>
       </property>
      </widget>
     </item>
     <item>
-     <widget class="QPushButton" name="pushButton_randomplaynext">
+     <widget class="QPushButton" name="pushButton_randomplaylist_next">
       <property name="text">
        <string>next</string>
       </property>
      </widget>
     </item>
     <item>
-     <widget class="QPushButton" name="pushButton_randomplayerstop">
+     <widget class="QPushButton" name="pushButton_randomplaylist_stop">
       <property name="text">
        <string>stop</string>
       </property>
@@ -224,7 +224,7 @@
     </rect>
    </property>
   </widget>
-  <widget class="QWidget" name="">
+  <widget class="QWidget" name="layoutWidget">
    <property name="geometry">
     <rect>
      <x>460</x>
