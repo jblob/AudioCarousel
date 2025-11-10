@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1013</width>
-    <height>589</height>
+    <height>777</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -26,25 +26,11 @@
     <string>Random Player</string>
    </property>
   </widget>
-  <widget class="QLabel" name="label_2">
-   <property name="geometry">
-    <rect>
-     <x>310</x>
-     <y>200</y>
-     <width>121</width>
-     <height>51</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>this slot should also
- be called on exit</string>
-   </property>
-  </widget>
   <widget class="QWidget" name="layoutWidget">
    <property name="geometry">
     <rect>
      <x>20</x>
-     <y>290</y>
+     <y>320</y>
      <width>227</width>
      <height>166</height>
     </rect>
@@ -97,7 +83,7 @@
    <property name="geometry">
     <rect>
      <x>20</x>
-     <y>260</y>
+     <y>290</y>
      <width>111</width>
      <height>18</height>
     </rect>
@@ -106,23 +92,13 @@
     <string>Album Player</string>
    </property>
   </widget>
-  <widget class="QGraphicsView" name="graphicsView">
-   <property name="geometry">
-    <rect>
-     <x>450</x>
-     <y>60</y>
-     <width>521</width>
-     <height>501</height>
-    </rect>
-   </property>
-  </widget>
   <widget class="QWidget" name="layoutWidget">
    <property name="geometry">
     <rect>
      <x>20</x>
      <y>60</y>
      <width>333</width>
-     <height>166</height>
+     <height>200</height>
     </rect>
    </property>
    <layout class="QVBoxLayout" name="verticalLayout">
@@ -154,16 +130,23 @@
      </widget>
     </item>
     <item>
-     <widget class="QPushButton" name="pushButton_randomplayerstop">
+     <widget class="QPushButton" name="pushButton_randomplayprev">
       <property name="text">
-       <string>stop</string>
+       <string>prev</string>
       </property>
      </widget>
     </item>
     <item>
-     <widget class="QPushButton" name="pushButton_5">
+     <widget class="QPushButton" name="pushButton_randomplaynext">
       <property name="text">
-       <string>save state</string>
+       <string>next</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QPushButton" name="pushButton_randomplayerstop">
+      <property name="text">
+       <string>stop</string>
       </property>
      </widget>
     </item>
@@ -173,7 +156,7 @@
    <property name="geometry">
     <rect>
      <x>20</x>
-     <y>480</y>
+     <y>510</y>
      <width>321</width>
      <height>77</height>
     </rect>
@@ -208,7 +191,136 @@
     </item>
    </layout>
   </widget>
+  <widget class="QLabel" name="label_cover">
+   <property name="geometry">
+    <rect>
+     <x>810</x>
+     <y>60</y>
+     <width>150</width>
+     <height>150</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string/>
+   </property>
+  </widget>
+  <widget class="QVideoWidget" name="widget_videooutput" native="true">
+   <property name="geometry">
+    <rect>
+     <x>600</x>
+     <y>530</y>
+     <width>120</width>
+     <height>80</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QListWidget" name="listWidget_randomplaylist">
+   <property name="geometry">
+    <rect>
+     <x>460</x>
+     <y>220</y>
+     <width>321</width>
+     <height>192</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="">
+   <property name="geometry">
+    <rect>
+     <x>460</x>
+     <y>61</y>
+     <width>321</width>
+     <height>151</height>
+    </rect>
+   </property>
+   <layout class="QGridLayout" name="gridLayout_2">
+    <item row="0" column="0">
+     <widget class="QLabel" name="label_artist">
+      <property name="toolTipDuration">
+       <number>11</number>
+      </property>
+      <property name="locale">
+       <locale language="German" country="Belgium"/>
+      </property>
+      <property name="text">
+       <string>Artist</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="1">
+     <widget class="QLabel" name="label_artist_2">
+      <property name="text">
+       <string/>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="0">
+     <widget class="QLabel" name="label_title">
+      <property name="text">
+       <string>Title</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="1">
+     <widget class="QLabel" name="label_title_2">
+      <property name="text">
+       <string/>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="0">
+     <widget class="QLabel" name="label_album">
+      <property name="text">
+       <string>Album</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="1">
+     <widget class="QLabel" name="label_album_2">
+      <property name="text">
+       <string/>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="0">
+     <widget class="QLabel" name="label_genre">
+      <property name="text">
+       <string>Genre</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="1">
+     <widget class="QLabel" name="label_genre_2">
+      <property name="text">
+       <string/>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="0">
+     <widget class="QLabel" name="label_year">
+      <property name="text">
+       <string>Year</string>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="1">
+     <widget class="QLabel" name="label_year_2">
+      <property name="text">
+       <string/>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>QVideoWidget</class>
+   <extends>QWidget</extends>
+   <header location="global">PyQt5.QtMultimediaWidgets</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>
