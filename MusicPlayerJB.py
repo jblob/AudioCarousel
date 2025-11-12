@@ -12,7 +12,6 @@ from PyQt5.QtMultimedia import (QMediaPlayer, QMediaContent, QMediaPlaylist, QMe
 from PyQt5.QtCore import pyqtRemoveInputHook # see comment below
 from PyQt5.QtGui import QPixmap
 
-
 bDebug = True
 
 class StdoutRedirector:
@@ -21,7 +20,6 @@ class StdoutRedirector:
 
 	def write(self, text):
 		self.text_widget.append(text) # Text am Ende einfügen
-		###self.text_widget.see(tk.END) # Zum Ende scrollen, um den neuesten Text anzuzeigen
 
 	def flush(self):
 		pass # Eine flush-Methode ist für diese Verwendung nicht erforderlich, sollte aber vorhanden sein
@@ -84,7 +82,8 @@ class MainWindow(QtWidgets.QDialog):
 		self.playlist = QMediaPlaylist()
 		pyqtRemoveInputHook() # otherwise no debugging with pdb possible :/
 		self.randomplaylist    = 'playlist_random_cur.m3u'
-		self.randomplaylistgen = 'playlist_random_gen.m3u' #TODO: these 2 should be the same file - only use different ones for testing
+		self.randomplaylistgen = self.randomplaylist
+		# self.randomplaylistgen = 'playlist_random_gen.m3u' #TODO: these 2 should be the same file - only use different ones for testing
 		self.randomplayliststate = self.getPlaylistSavedState(self.randomplaylistgen)
 		self.label_cover.setStyleSheet('background-color: white;')
 
@@ -97,6 +96,7 @@ class MainWindow(QtWidgets.QDialog):
 		self.pushButton_randomplaylist_next.clicked.connect(self.pushButton_randomplaylist_next_run)
 
 		self.player.metaDataChanged.connect(self.slotMetaDataChanged)
+		self.playlist.currentIndexChanged.connect(self.slotIndexChanged)
 		
 		### test
 		# self.player.setMedia(QMediaContent(QUrl.fromLocalFile('e:/000_2024/at_Urlaub/dSPACE_LearningConnectionRecording_MBD_1280x720_20210211-2_EN.mp4')))
@@ -121,11 +121,11 @@ class MainWindow(QtWidgets.QDialog):
 				fin.close()
 			
 			self.listWidget_randomplaylist.clear()
+			self.playlist.clear()
 			for _line in lines:
 				line = os.path.join(os.getcwd(), _line.strip())
 				self.playlist.addMedia(QMediaContent(self.url.fromLocalFile(line)))
 				self.listWidget_randomplaylist.addItem(line)
-			self.listWidget_randomplaylist.setCurrentRow(self.randomplayliststate)
 
 			self.playlist.setCurrentIndex(self.randomplayliststate)
 			self.player.setPlaylist(self.playlist)
@@ -164,18 +164,14 @@ class MainWindow(QtWidgets.QDialog):
 		# Method for going to previous track
 		if self.playlist.previousIndex() == -1:
 			self.playlist.setCurrentIndex(self.playlist.mediaCount()-1)
-			self.listWidget_randomplaylist.setCurrentRow(self.playlist.mediaCount()-1)
 		else:
 			self.playlist.previous()
-			self.listWidget_randomplaylist.setCurrentRow(self.listWidget_randomplaylist.currentRow() - 1)
 		  
 	def pushButton_randomplaylist_next_run(self):
 		# method for moving to next track
 		self.playlist.next()
-		self.listWidget_randomplaylist.setCurrentRow(self.listWidget_randomplaylist.currentRow() + 1)
 		if self.playlist.currentIndex() == -1:
 			self.playlist.setCurrentIndex(0)
-			self.listWidget_randomplaylist.setCurrentRow(0)
 			self.player.play()
 
 	def savePlaylistState(self, playlist, playlistfile):
@@ -205,22 +201,35 @@ class MainWindow(QtWidgets.QDialog):
 	def slotMetaDataChanged(self):
 		if self.player.isMetaDataAvailable():
 			data = self.player.metaData(QMediaMetaData.Title)
-			if bDebug:
-				print('<slotMetaDataChanged>' + str(data))
 			mp3data = MP3Data().data(self.player)
 			if bDebug:
 				print('<slotMetaDataChanged>' + str(mp3data))
-				print('<slotMetaDataChanged>' + str(mp3data['artist']))
 			self.label_artist_2.setText(mp3data['artist'])
 			self.label_title_2.setText(mp3data['track'])
 			self.label_album_2.setText(mp3data['album'])
-			self.label_genre_2.setText(str(mp3data['genre'])) # genre is a list, TODO: better handling to display it ?
+			self.label_genre_2.setText(str(mp3data['genre'])) # genre is a list, TODO: better handling to display it ? genre[0] ?
 			self.label_year_2.setText(str(mp3data['release']))
 
 			pixmap = QPixmap(mp3data['coverart_th'])
 			pixmap = pixmap.scaled(500,500)
 			self.label_cover.setPixmap(pixmap)
-	
+		else:
+			self.label_artist_2.setText('<unknown>')
+			self.label_title_2.setText('<unknown>')
+			self.label_album_2.setText('<unknown>')
+			self.label_genre_2.setText('<unknown>')
+			self.label_year_2.setText('<unknown>')
+
+			# self.label_cover.setPixmap(pixmap) ### TODO: standard pixmap
+			
+	def slotIndexChanged(self):
+		self.listWidget_randomplaylist.setCurrentRow(self.playlist.currentIndex())
+		if bDebug:
+			print('<setCurrentRow><slotIndexChanged>' + str(self.listWidget_randomplaylist.currentRow() + 1))
+		if self.playlist.currentIndex() < 0:
+			self.window.music_list.setCurrentRow(0)
+			self.playlist.setCurrentIndex(0)
+
 	def closeEvent(self, event):
 		if self.bPlaylistNeedsSaving:
 			self.savePlaylistState(self.playlist, self.randomplaylist)
