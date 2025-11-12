@@ -6,12 +6,12 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1013</width>
-    <height>777</height>
+    <width>1009</width>
+    <height>767</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Dialog</string>
+   <string>JB Music Player</string>
   </property>
   <widget class="QLabel" name="label">
    <property name="geometry">
