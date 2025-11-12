@@ -6,7 +6,7 @@ import random
 from subprocess import Popen, PIPE, STDOUT
 
 from PyQt5 import QtWidgets, uic
-from PyQt5.QtWidgets import QAction, QApplication, QLabel, QMainWindow, QMenu, QDialog, QFileDialog
+from PyQt5.QtWidgets import QAction, QApplication, QLabel, QMainWindow, QMenu, QDialog, QFileDialog, QStatusBar
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtMultimedia import (QMediaPlayer, QMediaContent, QMediaPlaylist, QMediaMetaData)
 from PyQt5.QtCore import pyqtRemoveInputHook # see comment below
@@ -106,6 +106,9 @@ class MainWindow(QtWidgets.QDialog):
 							# if (state == QMediaPlayer::StoppedState)
 								# vw->update(); });
 		# vw.show();
+		self.statusBar = QStatusBar()
+		self.verticalLayout_statusbar.addWidget(self.statusBar)
+		self.statusBar.showMessage('------------------------------------')
 
 	def pushButton_randomplaylist_play_run(self):
 		if self.player.state() == QMediaPlayer.PlayingState:
@@ -213,6 +216,7 @@ class MainWindow(QtWidgets.QDialog):
 			pixmap = QPixmap(mp3data['coverart_th'])
 			pixmap = pixmap.scaled(500,500)
 			self.label_cover.setPixmap(pixmap)
+			self.statusBar.showMessage('playing: ' + mp3data['track'] + ' - ' + mp3data['artist'])
 		else:
 			self.label_artist_2.setText('<unknown>')
 			self.label_title_2.setText('<unknown>')
