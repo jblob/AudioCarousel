@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1013</width>
+    <width>1252</width>
     <height>777</height>
    </rect>
   </property>
@@ -322,6 +322,19 @@
     </rect>
    </property>
    <layout class="QVBoxLayout" name="verticalLayout_statusbar"/>
+  </widget>
+  <widget class="QPushButton" name="pushButton_database_updateDB">
+   <property name="geometry">
+    <rect>
+     <x>1040</x>
+     <y>50</y>
+     <width>141</width>
+     <height>23</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>update DB</string>
+   </property>
   </widget>
  </widget>
  <customwidgets>

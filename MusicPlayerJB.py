@@ -4,6 +4,7 @@ import subprocess
 import glob
 import random
 from subprocess import Popen, PIPE, STDOUT
+from pathlib import Path
 
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtWidgets import QAction, QApplication, QLabel, QMainWindow, QMenu, QDialog, QFileDialog, QStatusBar
@@ -11,6 +12,11 @@ from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtMultimedia import (QMediaPlayer, QMediaContent, QMediaPlaylist, QMediaMetaData)
 from PyQt5.QtCore import pyqtRemoveInputHook # see comment below
 from PyQt5.QtGui import QPixmap
+
+import mutagen
+from mutagen.mp3 import MP3, MPEGInfo
+from mutagen.id3 import ID3
+from mutagen.easyid3 import EasyID3
 
 bDebug = True
 
@@ -46,9 +52,23 @@ class PlaylistGenerator:
 			
 class MP3Data:
 	def __init__(self):
-		pass
+		self.mpgType = None
+		self.title = None
+		self.artist = None
+		self.album = None
+		self.genre = None
+		self.duration = 0
+		self.bCoverAvailable = False
+		self.tracknumber = None
+		self.year = None
+		self.channels = 0
+		self.bitrate_mode = None
+		self.bitrate = 0
+		self.rating = 0
+		self.fullpath = None
 
 	def data(self, player):
+		# this is only usable while playing, otherwise no QMediaMetaData is available :/
 		info = {}
 		info['artist'] = player.metaData(QMediaMetaData.AlbumArtist)
 		info['album'] = player.metaData(QMediaMetaData.AlbumTitle)
@@ -73,10 +93,109 @@ class MP3Data:
 			info['coverart_th'] = 'Unknown'
 		return info
 		
+	def getTagsFromFile(self, file):
+		audio = MP3(file, ID3=EasyID3)
+		tags  = ID3(file)
+		if file.endswith('mp3'):
+			self.mpgType = 'mp3'
+		elif file.endswith('mp4'):
+			self.mpgType = 'mp4'
+		try:
+			self.title = audio['title'][0]
+		except:
+			pass
+		try:
+			self.artist = audio['artist'][0]
+		except:
+			pass
+		try:
+			self.album = audio['album'][0]
+		except:
+			pass
+		try:
+			self.genre = audio['genre'][0]
+		except:
+			pass
+		try:
+			self.duration = audio.info.length
+		except:
+			pass
+
+		if 'APIC:Cover' in tags:
+			self.bCoverAvailable = True
+		else:
+			self.bCoverAvailable = False
+		try:
+			self.tracknumber = audio['tracknumber'][0]
+		except:
+			pass
+		try:
+			self.year = audio['date'][0]
+		except:
+			pass
+		try:
+			self.channels = audio.info.channels
+		except:
+			pass
+		try:
+			self.bitrate_mode = audio.info.bitrate_mode
+		except:
+			pass
+		try:
+			self.bitrate = audio.info.bitrate
+		except:
+			pass
+		try:
+			self.rating = audio.info.rating
+		except:
+			pass
+		self.fullpath = file
+###
+		# print("ID3 tags included in this song ------------------")
+		# print(tags.pprint())
+		# print(tags.__dict__.keys())
+		# if text in tags:
+		# for t in tags:
+			# print('<TAG>' + str(t))
+		# if 'TALB' in tags:
+			# print('<TALB>' + str(tags['TALB']))
+		# else:
+			# print('<TALB>n/a')
+		# if 'APIC' in tags:
+			# print('<APIC>' + str(tags['APIC']))
+		# else:
+			# print('<APIC>n/a')
+		# if 'APIC:Cover' in tags:
+			# print('<APIC:Cover>' + str(tags['APIC:Cover']))
+		# else:
+			# print('<APIC:Cover>n/a')
+		
+	def printData(self, file):
+		print('---------------------------------------------------')
+		print('<MP3DATA>')
+		print('\t<MPGTYPE>' + self.mpgType)
+		print('\t<TITLE>' + self.title)
+		print('\t<ARTIST>' + self.artist)
+		print('\t<ALBUM>' + self.album)
+		print('\t<GENRE>' + self.genre)
+		print('\t<DURATION>' + str(self.duration))
+		print('\t<COVER_AVAIL>' + str(self.bCoverAvailable))
+		print('\t<TRACKNUMBER>' + self.tracknumber)
+		print('\t<YEAR>' + self.year)
+		print('\t<CHANNELS>' + str(self.channels))
+		print('\t<BITRATEMODE>' + str(self.bitrate_mode))
+		print('\t<BITRATE>' + str(self.bitrate))
+		print('\t<RATING>' + str(self.rating))
+		print('\t<FULLPATH>' + self.fullpath)
+		print('</MP3DATA>')
+		print('---------------------------------------------------')
+		
 class MainWindow(QtWidgets.QDialog):
 	def __init__(self):
 		super(MainWindow, self).__init__()
 		uic.loadUi('MusicPlayerJB.ui', self)
+		self.setFixedSize(1400,700)
+		
 		self.bPlaylistNeedsSaving = False
 		self.player = QMediaPlayer()
 		self.playlist = QMediaPlaylist()
@@ -94,6 +213,7 @@ class MainWindow(QtWidgets.QDialog):
 		self.pushButton_randomplaylist_pause.clicked.connect(self.pushButton_randomplaylist_pause_run)
 		self.pushButton_randomplaylist_prev.clicked.connect(self.pushButton_randomplaylist_prev_run)
 		self.pushButton_randomplaylist_next.clicked.connect(self.pushButton_randomplaylist_next_run)
+		self.pushButton_database_updateDB.clicked.connect(self.pushButton_database_updateDB_run)
 
 		self.player.metaDataChanged.connect(self.slotMetaDataChanged)
 		self.playlist.currentIndexChanged.connect(self.slotIndexChanged)
@@ -239,7 +359,29 @@ class MainWindow(QtWidgets.QDialog):
 			self.savePlaylistState(self.playlist, self.randomplaylist)
 		if bDebug:
 			print('Exiting ...')
-				
+	
+	def pushButton_database_updateDB_run(self):
+		# Thread filling the DB
+#		sounddir = QFileDialog.getExistingDirectory(self, 'select Music Directory', '.', QFileDialog.Option.ShowDirsOnly)
+		sounddir = os.path.join('E:\\', '000_2025', 'MusicManager_sync_workspaces', 'MusicMgr', 'Sound')
+		files = glob.glob(sounddir + '/**/*.mp3', recursive=True)
+		# mp4files = glob.glob(sounddir + '/**/*.mp4', recursive=True)
+		# files = glob.glob(sounddir + '/**/*.mp?', recursive=True) ### mp4 not supported by mutagen :( -> TODO: search for another lib
+		# files = list(Path(sounddir).rglob("*.[mM][pP][34]"))
+		# if bDebug:
+			# print(str(files))
+		nFilesToProceed = len(files) # for progress bar
+		for curfile in files:
+			if bDebug:
+				print('=============================================================')
+				# print('[Updating DB] processing: ' + curfile)
+				print('<ANALYZING>' + curfile)
+				print('=============================================================')
+			m = MP3Data()
+			m.getTagsFromFile(curfile)
+			if bDebug:
+				m.printData(curfile)
+
 if __name__ == '__main__':
 	app = QtWidgets.QApplication(sys.argv)
 	window = MainWindow()
