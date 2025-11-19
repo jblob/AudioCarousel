@@ -1,5 +1,6 @@
 # tempfiles
 /z.py
+/dbtest.py
 /MusicPlayerJB_working.py
 /MusicPlayerJB_bkup.ui
 /*.mp3
@@ -7,6 +8,8 @@
 /*.mpg
 /*.m3u
 /*.txt
+/*.db
+/*.log
 /bkup/
 
 # VS Code
