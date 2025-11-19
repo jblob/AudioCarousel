@@ -336,6 +336,19 @@
     <string>update DB</string>
    </property>
   </widget>
+  <widget class="QPushButton" name="pushButton_database_showDB">
+   <property name="geometry">
+    <rect>
+     <x>1040</x>
+     <y>80</y>
+     <width>141</width>
+     <height>23</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>show DB</string>
+   </property>
+  </widget>
  </widget>
  <customwidgets>
   <customwidget>

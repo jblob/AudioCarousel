@@ -5,6 +5,7 @@ import glob
 import random
 from subprocess import Popen, PIPE, STDOUT
 from pathlib import Path
+import sqlite3
 
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtWidgets import QAction, QApplication, QLabel, QMainWindow, QMenu, QDialog, QFileDialog, QStatusBar
@@ -19,6 +20,7 @@ from mutagen.id3 import ID3
 from mutagen.easyid3 import EasyID3
 
 bDebug = True
+bDebugSQL = False
 
 class StdoutRedirector:
 	def __init__(self, text_widget):
@@ -169,6 +171,7 @@ class MP3Data:
 			# print('<APIC:Cover>' + str(tags['APIC:Cover']))
 		# else:
 			# print('<APIC:Cover>n/a')
+		return [self.title, self.artist, self.album, self.genre, self.duration, self.bCoverAvailable, self.tracknumber, self.year, self.channels, self.bitrate_mode, self.bitrate, self.rating, self.fullpath]
 		
 	def printData(self, file):
 		print('---------------------------------------------------')
@@ -191,10 +194,12 @@ class MP3Data:
 		print('---------------------------------------------------')
 		
 class MainWindow(QtWidgets.QDialog):
-	def __init__(self):
+	def __init__(self, db):
 		super(MainWindow, self).__init__()
 		uic.loadUi('MusicPlayerJB.ui', self)
 		self.setFixedSize(1400,700)
+		
+		self.db = db
 		
 		self.bPlaylistNeedsSaving = False
 		self.player = QMediaPlayer()
@@ -214,6 +219,7 @@ class MainWindow(QtWidgets.QDialog):
 		self.pushButton_randomplaylist_prev.clicked.connect(self.pushButton_randomplaylist_prev_run)
 		self.pushButton_randomplaylist_next.clicked.connect(self.pushButton_randomplaylist_next_run)
 		self.pushButton_database_updateDB.clicked.connect(self.pushButton_database_updateDB_run)
+		self.pushButton_database_showDB.clicked.connect(self.pushButton_database_showDB_run)
 
 		self.player.metaDataChanged.connect(self.slotMetaDataChanged)
 		self.playlist.currentIndexChanged.connect(self.slotIndexChanged)
@@ -371,19 +377,180 @@ class MainWindow(QtWidgets.QDialog):
 		# if bDebug:
 			# print(str(files))
 		nFilesToProceed = len(files) # for progress bar
+		self.db.createTables()
 		for curfile in files:
 			if bDebug:
 				print('=============================================================')
 				# print('[Updating DB] processing: ' + curfile)
-				print('<ANALYZING>' + curfile)
-				print('=============================================================')
+				# print('<ANALYZING>' + curfile)
+				# print('=============================================================')
 			m = MP3Data()
-			m.getTagsFromFile(curfile)
-			if bDebug:
-				m.printData(curfile)
+			arrMp3Data = m.getTagsFromFile(curfile)
+			# if bDebug:
+				# m.printData(curfile)
+			# db.addline_tablesongs()
+			db.addline_tablesongs(arrMp3Data)
+
+		with open('sql.log', 'w') as fout:
+			fout.write(db.sqltext_dbg)
+			fout.close()
+			
+	def pushButton_database_showDB_run(self):
+		db.showTable('Songs')
+		# db.showTable('Albums')
+		
+
+class DB:		
+	def __init__(self):
+		# Verbindung zur Datenbank herstellen
+		self.conn = sqlite3.connect('sound.db')
+		# Cursor-Objekt (zum Zugriff auf die Datenbank)
+		self.cursor = self.conn.cursor()
+		self.conn.close()
+		self.sqltext_dbg = ''
+		
+	def exec_sql(self, cmd, bCloseConn=True):
+		try:
+			# Verbindung zur Datenbank herstellen
+			self.conn = sqlite3.connect('sound.db')
+			# Cursor-Objekt (zum Zugriff auf die Datenbank)
+			self.cursor = self.conn.cursor()
+			if bDebugSQL:
+				print('<SQL>' + cmd)
+			self.sqltext_dbg += cmd + '\n'
+			self.cursor.execute(cmd)
+			self.conn.commit()
+			if bCloseConn:
+				self.conn.close()
+		except sqlite3.Error as e:
+			print(e)
+			sys.exit(-1)
+
+	def createTables(self):
+		# Verbindung zur Datenbank herstellen
+		# self.conn = sqlite3.connect('sound.db')
+		# Cursor-Objekt (zum Zugriff auf die Datenbank)
+		# self.cursor = self.conn.cursor()
+
+		sql = """DROP TABLE Songs;"""
+		self.exec_sql(sql)
+		# if bDebug:
+			# print('<SQL>' + sql)
+		# self.sqltext_dbg += sql
+		# self.cursor.execute(sql)
+
+		sql = """
+		CREATE TABLE Songs 
+		(
+		ID INTEGER,
+		TITLE VARCHAR(255), 
+		ARTIST VARCHAR(255),
+		ALBUM VARCHAR(255), 
+		GENRE VARCHAR(255), 
+		DURATION INTEGER,
+		COVER_AVAIL INTEGER,
+		TRACKNUMBER INTEGER,
+		MYEAR INTEGER,
+		CHANNELS INTEGER,
+		BITRATEMODE VARCHAR(255),
+		BITRATE INTEGER,
+		RATING INTEGER,
+		FULLPATH VARCHAR(2048)
+		);"""
+		
+		# if bDebug:
+			# print('<SQL>' + sql)
+
+		# self.cursor.execute(sql)
+		# self.sqltext_dbg += sql
+		self.exec_sql(sql)
+
+		sql = """DROP TABLE Albums;"""
+		# if bDebug:
+			# print('<SQL>' + sql)
+		# self.sqltext_dbg += sql
+		# self.cursor.execute(sql)
+		self.exec_sql(sql)
+
+		sql = """
+		CREATE TABLE Albums
+		(
+		ID INTEGER,
+		ARTIST VARCHAR(255),
+		ALBUM VARCHAR(255), 
+		FULLPATH VARCHAR(2048),
+		COVER_AVAIL BOOL
+		);"""
+
+		# self.cursor.execute(sql)
+		# self.sqltext_dbg += sql
+		self.exec_sql(sql)
+
+		
+	# def addline_tablesongs(self, title, artist, album, genre, duration, bCoverAvailable, tracknumber, year, channels, bitrate_mode, bitrate, rating, fullpath)
+	def addline_tablesongs(self, data):
+		# Verbindung zur Datenbank herstellen
+		# self.conn = sqlite3.connect('sound.db')
+		# Cursor-Objekt (zum Zugriff auf die Datenbank)
+		# self.cursor = self.conn.cursor()
+		# return [self.title, self.artist, self.album, self.genre, self.duration, self.bCoverAvailable, self.tracknumber, self.year, self.channels, self.bitrate_mode, self.bitrate, self.rating, self.fullpath]
+
+		sql = """
+		INSERT INTO Songs VALUES 
+		(
+		0, "AAA", "BBB", "CCC", "DDD", 25, TRUE, 2, 2025, 1, "BABA", 128000, 99, "PATH"
+		);"""
+		
+		sql  = 'INSERT INTO Songs VALUES(' ###+ data 
+		sql += '0, '  ### primary key !!!
+		sql += '"' + data[0] + '", '   #title
+		sql += '"' + data[1] + '", '   #artist
+		sql += '"' + data[2] + '", '   #album
+		sql += '"' + data[3] + '", '   #genre
+		sql += str(data[4])  + ', '    #duration
+		sql += str(data[5])  + ', '    #bCoverAvailable
+		sql += str(data[6])  + ', '    #tracknumber
+		sql += str(data[7])  + ', '    #year
+		sql += str(data[8])  + ', '    #channels
+		sql += '"' + str(data[9])  + '", '    #bitrate_mode
+		sql += str(data[10])  + ', '   #bitrate
+		sql += str(data[11])  + ', '   #rating
+		sql += '"' + data[12] + '"); ' #fullpath
+		# for d in data:
+			# sql += data + ', '
+		# sql[:-1] = ')'
+		# sql += ';'
+		print('<DBG>' + sql)
+
+		# self.cursor.execute(sql)
+		# self.sqltext_dbg += sql
+		# self.conn.close()
+		self.exec_sql(sql)
+		
+	def showTable(self, table):
+		# Verbindung zur Datenbank herstellen
+		# self.conn = sqlite3.connect('sound.db')
+		# Cursor-Objekt (zum Zugriff auf die Datenbank)
+		# self.cursor = self.conn.cursor()
+
+		sql = 'SELECT * FROM ' + table + ';'
+		# self.cursor.execute(sql)
+		# self.sqltext_dbg += sql
+		self.exec_sql(sql, False)
+
+		rows = self.cursor.fetchall()
+		print(str(rows))
+		self.conn.close()
+		for row in rows:
+			print(row)
+
+		print(str(rows))
+
+
 
 if __name__ == '__main__':
 	app = QtWidgets.QApplication(sys.argv)
-	window = MainWindow()
+	db = DB()
+	window = MainWindow(db)
 	window.show()
 	sys.exit(app.exec_())
