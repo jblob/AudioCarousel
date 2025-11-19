@@ -13,6 +13,8 @@ from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtMultimedia import (QMediaPlayer, QMediaContent, QMediaPlaylist, QMediaMetaData)
 from PyQt5.QtCore import pyqtRemoveInputHook # see comment below
 from PyQt5.QtGui import QPixmap
+from PyQt5.QtWidgets import QTableView, QTabWidget
+from PyQt5.QtCore import QAbstractTableModel
 
 import mutagen
 from mutagen.mp3 import MP3, MPEGInfo
@@ -396,8 +398,52 @@ class MainWindow(QtWidgets.QDialog):
 			fout.close()
 			
 	def pushButton_database_showDB_run(self):
-		db.showTable('Songs')
-		# db.showTable('Albums')
+		db.getTable('Songs')
+		# db.getTable('Albums')
+
+		###
+		# Create and show the TabWindow
+		self.tab_window = TabWindow()
+		self.tab_window.show()
+
+class TabWindow(QMainWindow):
+	def __init__(self):
+		super(TabWindow, self).__init__()
+		self.setWindowTitle("Tab Window")
+		self.resize(600, 400)
+
+		# Create the QTabWidget
+		tab_widget = QTabWidget(self)
+		self.setCentralWidget(tab_widget)
+
+		# Sample data for the tables
+		data1 = [
+			[1, "Alice", 30],
+			[2, "Bob", 25],
+			[3, "Charlie", 35],
+		]
+		headers1 = ["ID", "Name", "Age"]
+
+		data2 = [
+			["Product A", 100, 50.5],
+			["Product B", 200, 75.0],
+			["Product C", 150, 60.0],
+		]
+		headers2 = ["Product", "Quantity", "Price"]
+
+		# Create the first table
+		model1 = TableModel(data1, headers1)
+		table_view1 = QTableView()
+		table_view1.setModel(model1)
+
+		# Create the second table
+		model2 = TableModel(data2, headers2)
+		table_view2 = QTableView()
+		table_view2.setModel(model2)
+
+		# Add the tables to the tabs
+		tab_widget.addTab(table_view1, "Users")
+		tab_widget.addTab(table_view2, "Products")
 		
 
 class DB:		
@@ -527,7 +573,7 @@ class DB:
 		# self.conn.close()
 		self.exec_sql(sql)
 		
-	def showTable(self, table):
+	def getTable(self, table):
 		# Verbindung zur Datenbank herstellen
 		# self.conn = sqlite3.connect('sound.db')
 		# Cursor-Objekt (zum Zugriff auf die Datenbank)
@@ -545,8 +591,28 @@ class DB:
 			print(row)
 
 		print(str(rows))
+		
+class TableModel(QAbstractTableModel):
+	def __init__(self, data, headers):
+		super().__init__()
+		self._data = data
+		self._headers = headers  # Column headers
+		
+	def data(self, index, role):
+		if role == Qt.DisplayRole:
+			# See below for the nested-list data structure.
+			# .row() indexes into the outer list,
+			# .column() indexes into the sub-list
+			return self._data[index.row()][index.column()]
 
+	def rowCount(self, index):
+		# The length of the outer list.
+		return len(self._data)
 
+	def columnCount(self, index):
+		# The following takes the first sub-list, and returns
+		# the length (only works if all rows are an equal length)
+		return len(self._headers)  # Number of columns
 
 if __name__ == '__main__':
 	app = QtWidgets.QApplication(sys.argv)
