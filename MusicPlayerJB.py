@@ -95,6 +95,9 @@ class MP3Data:
 			info['coverart'] = 'Unknown'
 		if info['coverart_th'] == None:
 			info['coverart_th'] = 'Unknown'
+		# if bDebug:
+			# metadatalist = player.availableMetaData()
+			# print('<METADATALIST>' + str(metadatalist))
 		return info
 		
 	def getTagsFromFile(self, file):
@@ -373,6 +376,7 @@ class MainWindow(QtWidgets.QDialog):
 #		sounddir = QFileDialog.getExistingDirectory(self, 'select Music Directory', '.', QFileDialog.Option.ShowDirsOnly)
 		sounddir = os.path.join('E:\\', '000_2025', 'MusicManager_sync_workspaces', 'MusicMgr', 'Sound')
 		files = glob.glob(sounddir + '/**/*.mp3', recursive=True)
+		lAllAbums = []
 		# mp4files = glob.glob(sounddir + '/**/*.mp4', recursive=True)
 		# files = glob.glob(sounddir + '/**/*.mp?', recursive=True) ### mp4 not supported by mutagen :( -> TODO: search for another lib
 		# files = list(Path(sounddir).rglob("*.[mM][pP][34]"))
@@ -380,34 +384,41 @@ class MainWindow(QtWidgets.QDialog):
 			# print(str(files))
 		nFilesToProceed = len(files) # for progress bar
 		self.db.createTables()
+		if bDebug:
+			print('=============================================================')
+			print('[Updating DB] started')
 		for curfile in files:
 			if bDebug:
-				print('=============================================================')
-				# print('[Updating DB] processing: ' + curfile)
-				# print('<ANALYZING>' + curfile)
-				# print('=============================================================')
+				print('\tprocessing: ' + curfile)
 			m = MP3Data()
 			arrMp3Data = m.getTagsFromFile(curfile)
 			# if bDebug:
 				# m.printData(curfile)
-			# db.addline_tablesongs()
 			db.addline_tablesongs(arrMp3Data)
+			if not arrMp3Data[2] in lAllAbums:
+				lAllAbums.append(arrMp3Data[2])
+				db.addline_tablealbums(arrMp3Data)
+		if bDebug:
+			print('[Updating DB] finished')
+			print('=============================================================')
 
 		with open('sql.log', 'w') as fout:
 			fout.write(db.sqltext_dbg)
 			fout.close()
 			
 	def pushButton_database_showDB_run(self):
-		db.getTable('Songs')
-		# db.getTable('Albums')
+		data1 = db.getTable('Songs')
+		data2 = db.getTable('Albums')
 
-		###
+		headers1 = ['Title', 'Artist', 'Album', 'Genre', 'Duration', 'CoverAvail', 'TrackNr', 'Year', 'Channels', 'BitrateMode', 'Bitrate', 'Rating', 'Fullpath']
+		headers2 = ['Artist', 'Album', 'FullPath']
+
 		# Create and show the TabWindow
-		self.tab_window = TabWindow()
+		self.tab_window = TabWindow(headers1, data1, headers2, data2)
 		self.tab_window.show()
 
 class TabWindow(QMainWindow):
-	def __init__(self):
+	def __init__(self, headers1, data1, headers2, data2):
 		super(TabWindow, self).__init__()
 		self.setWindowTitle("Tab Window")
 		self.resize(600, 400)
@@ -416,34 +427,22 @@ class TabWindow(QMainWindow):
 		tab_widget = QTabWidget(self)
 		self.setCentralWidget(tab_widget)
 
-		# Sample data for the tables
-		data1 = [
-			[1, "Alice", 30],
-			[2, "Bob", 25],
-			[3, "Charlie", 35],
-		]
-		headers1 = ["ID", "Name", "Age"]
-
-		data2 = [
-			["Product A", 100, 50.5],
-			["Product B", 200, 75.0],
-			["Product C", 150, 60.0],
-		]
-		headers2 = ["Product", "Quantity", "Price"]
 
 		# Create the first table
 		model1 = TableModel(data1, headers1)
 		table_view1 = QTableView()
 		table_view1.setModel(model1)
+		table_view1.verticalHeader().hide();
 
 		# Create the second table
 		model2 = TableModel(data2, headers2)
 		table_view2 = QTableView()
 		table_view2.setModel(model2)
+		table_view2.verticalHeader().hide();
 
 		# Add the tables to the tabs
-		tab_widget.addTab(table_view1, "Users")
-		tab_widget.addTab(table_view2, "Products")
+		tab_widget.addTab(table_view1, 'Songs')
+		tab_widget.addTab(table_view2, 'Albums')
 		
 
 class DB:		
@@ -473,22 +472,12 @@ class DB:
 			sys.exit(-1)
 
 	def createTables(self):
-		# Verbindung zur Datenbank herstellen
-		# self.conn = sqlite3.connect('sound.db')
-		# Cursor-Objekt (zum Zugriff auf die Datenbank)
-		# self.cursor = self.conn.cursor()
-
-		sql = """DROP TABLE Songs;"""
+		sql = """DROP TABLE IF EXISTS Songs;"""
 		self.exec_sql(sql)
-		# if bDebug:
-			# print('<SQL>' + sql)
-		# self.sqltext_dbg += sql
-		# self.cursor.execute(sql)
 
 		sql = """
 		CREATE TABLE Songs 
 		(
-		ID INTEGER,
 		TITLE VARCHAR(255), 
 		ARTIST VARCHAR(255),
 		ALBUM VARCHAR(255), 
@@ -504,51 +493,26 @@ class DB:
 		FULLPATH VARCHAR(2048)
 		);"""
 		
-		# if bDebug:
-			# print('<SQL>' + sql)
-
-		# self.cursor.execute(sql)
-		# self.sqltext_dbg += sql
 		self.exec_sql(sql)
 
-		sql = """DROP TABLE Albums;"""
-		# if bDebug:
-			# print('<SQL>' + sql)
-		# self.sqltext_dbg += sql
-		# self.cursor.execute(sql)
+		sql = """DROP TABLE IF EXISTS Albums;"""
 		self.exec_sql(sql)
 
 		sql = """
 		CREATE TABLE Albums
 		(
-		ID INTEGER,
 		ARTIST VARCHAR(255),
 		ALBUM VARCHAR(255), 
-		FULLPATH VARCHAR(2048),
-		COVER_AVAIL BOOL
+		FULLPATH VARCHAR(2048)
 		);"""
 
-		# self.cursor.execute(sql)
-		# self.sqltext_dbg += sql
 		self.exec_sql(sql)
 
 		
 	# def addline_tablesongs(self, title, artist, album, genre, duration, bCoverAvailable, tracknumber, year, channels, bitrate_mode, bitrate, rating, fullpath)
 	def addline_tablesongs(self, data):
-		# Verbindung zur Datenbank herstellen
-		# self.conn = sqlite3.connect('sound.db')
-		# Cursor-Objekt (zum Zugriff auf die Datenbank)
-		# self.cursor = self.conn.cursor()
-		# return [self.title, self.artist, self.album, self.genre, self.duration, self.bCoverAvailable, self.tracknumber, self.year, self.channels, self.bitrate_mode, self.bitrate, self.rating, self.fullpath]
-
-		sql = """
-		INSERT INTO Songs VALUES 
-		(
-		0, "AAA", "BBB", "CCC", "DDD", 25, TRUE, 2, 2025, 1, "BABA", 128000, 99, "PATH"
-		);"""
-		
 		sql  = 'INSERT INTO Songs VALUES(' ###+ data 
-		sql += '0, '  ### primary key !!!
+		# sql += '0, '  ### primary key !!!
 		sql += '"' + data[0] + '", '   #title
 		sql += '"' + data[1] + '", '   #artist
 		sql += '"' + data[2] + '", '   #album
@@ -562,35 +526,30 @@ class DB:
 		sql += str(data[10])  + ', '   #bitrate
 		sql += str(data[11])  + ', '   #rating
 		sql += '"' + data[12] + '"); ' #fullpath
-		# for d in data:
-			# sql += data + ', '
-		# sql[:-1] = ')'
-		# sql += ';'
-		print('<DBG>' + sql)
 
-		# self.cursor.execute(sql)
-		# self.sqltext_dbg += sql
-		# self.conn.close()
+		self.exec_sql(sql)
+		
+	def addline_tablealbums(self, data):
+		sql  = 'INSERT INTO Albums VALUES('
+		# sql += '0, '  ### primary key !!!
+		sql += '"' + data[1] + '", '   #artist
+		sql += '"' + data[2] + '", '   #album
+#		sql += '"' + data[3] + '", '   #genre -> later
+#		sql += str(data[4])  + ', '    #duration -> later
+#		sql += str(data[5])  + ', '    #bCoverAvailable -> later
+#		sql += str(data[7])  + ', '    #year -> later
+		sql += '"' + data[12] + '"); ' #fullpath
+
 		self.exec_sql(sql)
 		
 	def getTable(self, table):
-		# Verbindung zur Datenbank herstellen
-		# self.conn = sqlite3.connect('sound.db')
-		# Cursor-Objekt (zum Zugriff auf die Datenbank)
-		# self.cursor = self.conn.cursor()
-
 		sql = 'SELECT * FROM ' + table + ';'
-		# self.cursor.execute(sql)
-		# self.sqltext_dbg += sql
 		self.exec_sql(sql, False)
 
 		rows = self.cursor.fetchall()
-		print(str(rows))
 		self.conn.close()
-		for row in rows:
-			print(row)
-
-		print(str(rows))
+		
+		return rows
 		
 class TableModel(QAbstractTableModel):
 	def __init__(self, data, headers):
@@ -613,6 +572,13 @@ class TableModel(QAbstractTableModel):
 		# The following takes the first sub-list, and returns
 		# the length (only works if all rows are an equal length)
 		return len(self._headers)  # Number of columns
+
+	def headerData(self, section, orientation, role=Qt.DisplayRole):
+		if role == Qt.DisplayRole:
+			if orientation == Qt.Horizontal:  # Column headers
+				return self._headers[section]
+			elif orientation == Qt.Vertical:  # Row numbers
+				return str(section + 1)
 
 if __name__ == '__main__':
 	app = QtWidgets.QApplication(sys.argv)
