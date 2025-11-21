@@ -422,7 +422,7 @@ class MainWindow(QtWidgets.QDialog):
 
 	def pushButton_testsqlquery_run(self):
 		cmd = self.lineEdit_testsqlquery.text()
-		res = db.exec_sql(cmd, True, False)
+		res = db.exec_sql(cmd, True, False, True)
 		self.textBrowser_testsqlquery.setText(res)
 		
 
@@ -463,7 +463,7 @@ class DB:
 		self.conn.close()
 		self.sqltext_dbg = ''
 		
-	def exec_sql(self, cmd, bCloseConn=True, bExitOnError = True):
+	def exec_sql(self, cmd, bCloseConn=True, bExitOnError = True, bSQLTest = False):
 		ret_text = ''
 		try:
 			# Verbindung zur Datenbank herstellen
@@ -475,7 +475,7 @@ class DB:
 			self.sqltext_dbg += cmd + '\n'
 			self.cursor.execute(cmd)
 			self.conn.commit()
-			if cmd.upper().startswith('SELECT'):
+			if cmd.upper().startswith('SELECT') and bSQLTest:
 				rows = self.cursor.fetchall()
 				for r in rows:
 					ret_text += str(r) + '\n'
