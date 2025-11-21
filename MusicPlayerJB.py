@@ -202,7 +202,7 @@ class MainWindow(QtWidgets.QDialog):
 	def __init__(self, db):
 		super(MainWindow, self).__init__()
 		uic.loadUi('MusicPlayerJB.ui', self)
-		self.setFixedSize(1400,700)
+		self.setFixedSize(1400,810)
 		
 		self.db = db
 		
@@ -225,6 +225,7 @@ class MainWindow(QtWidgets.QDialog):
 		self.pushButton_randomplaylist_next.clicked.connect(self.pushButton_randomplaylist_next_run)
 		self.pushButton_database_updateDB.clicked.connect(self.pushButton_database_updateDB_run)
 		self.pushButton_database_showDB.clicked.connect(self.pushButton_database_showDB_run)
+		self.pushButton_testsqlquery.clicked.connect(self.pushButton_testsqlquery_run)
 
 		self.player.metaDataChanged.connect(self.slotMetaDataChanged)
 		self.playlist.currentIndexChanged.connect(self.slotIndexChanged)
@@ -417,6 +418,12 @@ class MainWindow(QtWidgets.QDialog):
 		self.tab_window = TabWindow(headers1, data1, headers2, data2)
 		self.tab_window.show()
 
+	def pushButton_testsqlquery_run(self):
+		cmd = self.lineEdit_testsqlquery.text()
+		res = db.exec_sql(cmd, True, False)
+		self.textBrowser_testsqlquery.setText(res)
+		
+
 class TabWindow(QMainWindow):
 	def __init__(self, headers1, data1, headers2, data2):
 		super(TabWindow, self).__init__()
@@ -454,7 +461,8 @@ class DB:
 		self.conn.close()
 		self.sqltext_dbg = ''
 		
-	def exec_sql(self, cmd, bCloseConn=True):
+	def exec_sql(self, cmd, bCloseConn=True, bExitOnError = True):
+		ret_text = ''
 		try:
 			# Verbindung zur Datenbank herstellen
 			self.conn = sqlite3.connect('sound.db')
@@ -465,11 +473,18 @@ class DB:
 			self.sqltext_dbg += cmd + '\n'
 			self.cursor.execute(cmd)
 			self.conn.commit()
+			if cmd.upper().startswith('SELECT'):
+				rows = self.cursor.fetchall()
+				for r in rows:
+					ret_text += str(r) + '\n'
 			if bCloseConn:
 				self.conn.close()
 		except sqlite3.Error as e:
+			ret_text += str(e)
 			print(e)
-			sys.exit(-1)
+			if bExitOnError:
+				sys.exit(-1)
+		return ret_text
 
 	def createTables(self):
 		sql = """DROP TABLE IF EXISTS Songs;"""

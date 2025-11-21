@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1252</width>
-    <height>777</height>
+    <height>867</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -158,21 +158,27 @@
      <x>20</x>
      <y>510</y>
      <width>321</width>
-     <height>77</height>
+     <height>149</height>
     </rect>
    </property>
    <layout class="QGridLayout" name="gridLayout">
-    <item row="0" column="0">
-     <widget class="QLabel" name="label_4">
-      <property name="text">
-       <string>select album and play</string>
-      </property>
-     </widget>
-    </item>
     <item row="1" column="0">
      <widget class="QLabel" name="label_5">
       <property name="text">
        <string>Genre</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="1">
+     <widget class="QComboBox" name="comboBox_2"/>
+    </item>
+    <item row="2" column="0">
+     <widget class="QComboBox" name="comboBox"/>
+    </item>
+    <item row="0" column="0">
+     <widget class="QLabel" name="label_4">
+      <property name="text">
+       <string>select album and play</string>
       </property>
      </widget>
     </item>
@@ -182,12 +188,6 @@
        <string>Artist</string>
       </property>
      </widget>
-    </item>
-    <item row="2" column="0">
-     <widget class="QComboBox" name="comboBox"/>
-    </item>
-    <item row="2" column="1">
-     <widget class="QComboBox" name="comboBox_2"/>
     </item>
    </layout>
   </widget>
@@ -316,7 +316,7 @@
    <property name="geometry">
     <rect>
      <x>20</x>
-     <y>719</y>
+     <y>770</y>
      <width>781</width>
      <height>41</height>
     </rect>
@@ -347,6 +347,39 @@
    </property>
    <property name="text">
     <string>show DB</string>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="lineEdit_testsqlquery">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>670</y>
+     <width>691</width>
+     <height>41</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="pushButton_testsqlquery">
+   <property name="geometry">
+    <rect>
+     <x>714</x>
+     <y>670</y>
+     <width>91</width>
+     <height>91</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>run sql query</string>
+   </property>
+  </widget>
+  <widget class="QTextBrowser" name="textBrowser_testsqlquery">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>720</y>
+     <width>691</width>
+     <height>41</height>
+    </rect>
    </property>
   </widget>
  </widget>
