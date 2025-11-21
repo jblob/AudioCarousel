@@ -243,6 +243,12 @@ class MainWindow(QtWidgets.QDialog):
 		self.statusBar = QStatusBar()
 		self.verticalLayout_statusbar.addWidget(self.statusBar)
 		self.statusBar.showMessage('------------------------------------')
+		
+		# fill listviews from DB
+		self.allgenres = self.db.getColValsFromDB('Albums', 'Genre')
+		self.allartists = self.db.getColValsFromDB('Albums', 'Artist')
+		self.comboBox_genre.addItems(self.allgenres)
+		self.comboBox_artist.addItems(self.allartists)
 
 	def pushButton_randomplaylist_play_run(self):
 		if self.player.state() == QMediaPlayer.PlayingState:
@@ -568,6 +574,21 @@ class DB:
 		self.conn.close()
 		
 		return rows
+		
+	def getColValsFromDB(self, table, colname):
+		retval = []
+		sql = 'SELECT ' + colname + ' FROM ' + table
+		self.exec_sql(sql, False)
+		rows = self.cursor.fetchall()
+		for r in rows:
+			if not r[0] in retval:
+				retval.append(r[0])
+		self.conn.close()
+		
+		if bDebug:
+			print('<getGenresFromDB>' + str(retval))
+			
+		return retval
 		
 class TableModel(QAbstractTableModel):
 	def __init__(self, data, headers):
