@@ -201,8 +201,10 @@ class MP3Data:
 class MainWindow(QtWidgets.QDialog):
 	def __init__(self, db):
 		super(MainWindow, self).__init__()
+		self.COVER_SIZE = 150
 		uic.loadUi('MusicPlayerJB.ui', self)
 		self.setFixedSize(1400,810)
+		self.label_cover.setFixedSize(self.COVER_SIZE, self.COVER_SIZE)
 		
 		self.db = db
 		
@@ -346,7 +348,7 @@ class MainWindow(QtWidgets.QDialog):
 			self.label_year_2.setText(str(mp3data['release']))
 
 			pixmap = QPixmap(mp3data['coverart_th'])
-			pixmap = pixmap.scaled(500,500)
+			pixmap = pixmap.scaled(self.COVER_SIZE, self.COVER_SIZE)
 			self.label_cover.setPixmap(pixmap)
 			self.statusBar.showMessage('playing: ' + mp3data['track'] + ' - ' + mp3data['artist'])
 		else:
