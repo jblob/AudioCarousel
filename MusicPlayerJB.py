@@ -414,7 +414,7 @@ class MainWindow(QtWidgets.QDialog):
 		data2 = db.getTable('Albums')
 
 		headers1 = ['Title', 'Artist', 'Album', 'Genre', 'Duration', 'CoverAvail', 'TrackNr', 'Year', 'Channels', 'BitrateMode', 'Bitrate', 'Rating', 'Fullpath']
-		headers2 = ['Artist', 'Album', 'FullPath']
+		headers2 = ['Artist', 'Album', 'Genre', 'FullPath']
 
 		# Create and show the TabWindow
 		self.tab_window = TabWindow(headers1, data1, headers2, data2)
@@ -520,6 +520,7 @@ class DB:
 		(
 		ARTIST VARCHAR(255),
 		ALBUM VARCHAR(255), 
+		GENRE VARCHAR(255), 
 		FULLPATH VARCHAR(2048)
 		);"""
 
@@ -551,7 +552,7 @@ class DB:
 		# sql += '0, '  ### primary key !!!
 		sql += '"' + data[1] + '", '   #artist
 		sql += '"' + data[2] + '", '   #album
-#		sql += '"' + data[3] + '", '   #genre -> later
+		sql += '"' + data[3] + '", '   #genre
 #		sql += str(data[4])  + ', '    #duration -> later
 #		sql += str(data[5])  + ', '    #bCoverAvailable -> later
 #		sql += str(data[7])  + ', '    #year -> later
