@@ -18,6 +18,7 @@ from PyQt5.QtCore import QAbstractTableModel
 
 import mutagen
 from mutagen.mp3 import MP3, MPEGInfo
+from mutagen.mp4 import MP4
 from mutagen.id3 import ID3
 from mutagen.easyid3 import EasyID3
 
@@ -56,20 +57,20 @@ class PlaylistGenerator:
 			
 class MP3Data:
 	def __init__(self):
-		self.mpgType = None
-		self.title = None
-		self.artist = None
-		self.album = None
-		self.genre = None
+		self.mpgType = ''
+		self.title = ''
+		self.artist = ''
+		self.album = ''
+		self.genre = ''
 		self.duration = 0
 		self.bCoverAvailable = False
-		self.tracknumber = None
-		self.year = None
+		self.tracknumber = ''
+		self.year = 0
 		self.channels = 0
-		self.bitrate_mode = None
+		self.bitrate_mode = ''
 		self.bitrate = 0
 		self.rating = 0
-		self.fullpath = None
+		self.fullpath = ''
 
 	def data(self, player):
 		# this is only usable while playing, otherwise no QMediaMetaData is available :/
@@ -101,81 +102,141 @@ class MP3Data:
 		return info
 		
 	def getTagsFromFile(self, file):
-		audio = MP3(file, ID3=EasyID3)
-		tags  = ID3(file)
 		if file.endswith('mp3'):
 			self.mpgType = 'mp3'
 		elif file.endswith('mp4'):
 			self.mpgType = 'mp4'
-		try:
-			self.title = audio['title'][0]
-		except:
-			pass
-		try:
-			self.artist = audio['artist'][0]
-		except:
-			pass
-		try:
-			self.album = audio['album'][0]
-		except:
-			pass
-		try:
-			self.genre = audio['genre'][0]
-		except:
-			pass
-		try:
-			self.duration = audio.info.length
-		except:
-			pass
+		if self.mpgType == 'mp3':
+			audio = MP3(file, ID3=EasyID3)
+			tags  = ID3(file)
+			try:
+				self.title = audio['title'][0]
+			except:
+				pass
+			try:
+				self.artist = audio['artist'][0]
+			except:
+				pass
+			try:
+				self.album = audio['album'][0]
+			except:
+				pass
+			try:
+				self.genre = audio['genre'][0]
+			except:
+				pass
+			try:
+				self.duration = audio.info.length
+			except:
+				pass
 
-		if 'APIC:Cover' in tags:
-			self.bCoverAvailable = True
-		else:
+			if 'APIC:Cover' in tags:
+				self.bCoverAvailable = True
+			else:
+				self.bCoverAvailable = False
+			try:
+				self.tracknumber = audio['tracknumber'][0]
+			except:
+				pass
+			try:
+				self.year = audio['date'][0]
+			except:
+				pass
+			try:
+				self.channels = audio.info.channels
+			except:
+				pass
+			try:
+				self.bitrate_mode = audio.info.bitrate_mode
+			except:
+				pass
+			try:
+				self.bitrate = audio.info.bitrate
+			except:
+				pass
+			try:
+				self.rating = audio.info.rating
+			except:
+				pass
+			self.fullpath = file
+	###
+			# print("ID3 tags included in this song ------------------")
+			# print(tags.pprint())
+			# print(tags.__dict__.keys())
+			# if text in tags:
+			# for t in tags:
+				# print('<TAG>' + str(t))
+			# if 'TALB' in tags:
+				# print('<TALB>' + str(tags['TALB']))
+			# else:
+				# print('<TALB>n/a')
+			# if 'APIC' in tags:
+				# print('<APIC>' + str(tags['APIC']))
+			# else:
+				# print('<APIC>n/a')
+			# if 'APIC:Cover' in tags:
+				# print('<APIC:Cover>' + str(tags['APIC:Cover']))
+			# else:
+				# print('<APIC:Cover>n/a')
+		elif self.mpgType == 'mp4':
+			# try:
+			mp4 = MP4(file)
+			try:
+				# self.title = mp4.get('title')[0]
+				self.title = mp4.tags['\xa9nam'][0]
+			except:
+				pass
+			try:
+				# self.artist = mp4.get('artist')[0]
+				self.artist = mp4.tags['\xa9ART'][0]
+			except:
+				pass
+			try:
+				# self.album = mp4.get('album')[0]
+				self.album = mp4.tags['\xa9alb'][0]
+			except:
+				pass
+			try:
+				# self.genre = mp4.get('genre')[0]
+				self.genre = mp4.tags['\xa9gen'][0]
+			except:
+				pass
+			try:
+				self.duration = mp4.info.length
+			except:
+				pass
 			self.bCoverAvailable = False
-		try:
-			self.tracknumber = audio['tracknumber'][0]
-		except:
-			pass
-		try:
-			self.year = audio['date'][0]
-		except:
-			pass
-		try:
-			self.channels = audio.info.channels
-		except:
-			pass
-		try:
-			self.bitrate_mode = audio.info.bitrate_mode
-		except:
-			pass
-		try:
-			self.bitrate = audio.info.bitrate
-		except:
-			pass
-		try:
-			self.rating = audio.info.rating
-		except:
-			pass
-		self.fullpath = file
-###
-		# print("ID3 tags included in this song ------------------")
-		# print(tags.pprint())
-		# print(tags.__dict__.keys())
-		# if text in tags:
-		# for t in tags:
-			# print('<TAG>' + str(t))
-		# if 'TALB' in tags:
-			# print('<TALB>' + str(tags['TALB']))
-		# else:
-			# print('<TALB>n/a')
-		# if 'APIC' in tags:
-			# print('<APIC>' + str(tags['APIC']))
-		# else:
-			# print('<APIC>n/a')
-		# if 'APIC:Cover' in tags:
-			# print('<APIC:Cover>' + str(tags['APIC:Cover']))
-		# else:
-			# print('<APIC:Cover>n/a')
+			self.tracknumber = 0
+			try:
+				# self.year = mp4.get('year')[0]
+				self.year = mp4.tags['\xa9day'][0]
+			except:
+				pass
+			try:
+				self.channels = mp4.info.channels
+			except:
+				pass
+			self.bitrate_mode  = 'BitrateMode.UNKNOWN' ### TODO
+			try:
+				self.bitrate = mp4.info.bitrate
+			except:
+				pass
+			self.rating = 0 ### TODO
+			self.fullpath = file
+
+			# metadata = \
+			# {
+				# 'Title': mp4.get('title', [''])[0],
+				# 'Artist': mp4.get('artist', [''])[0],
+				# 'Album': mp4.get('album', [''])[0],
+				# 'Genre': mp4.get('genre', [''])[0],
+				# 'Duration': mp4.info.length,
+				# 'Bitrate': mp4.info.bitrate,
+				# 'Sample Rate': mp4.info.sample_rate, ### !!!
+				# 'Channels': mp4.info.channels
+			# }
+			# print(str(metadata))
+
 		return [self.title, self.artist, self.album, self.genre, self.duration, self.bCoverAvailable, self.tracknumber, self.year, self.channels, self.bitrate_mode, self.bitrate, self.rating, self.fullpath]
 		
 	def printData(self, file):
@@ -188,8 +249,8 @@ class MP3Data:
 		print('\t<GENRE>' + self.genre)
 		print('\t<DURATION>' + str(self.duration))
 		print('\t<COVER_AVAIL>' + str(self.bCoverAvailable))
-		print('\t<TRACKNUMBER>' + self.tracknumber)
-		print('\t<YEAR>' + self.year)
+		print('\t<TRACKNUMBER>' + str(self.tracknumber))
+		print('\t<YEAR>' + str(self.year))
 		print('\t<CHANNELS>' + str(self.channels))
 		print('\t<BITRATEMODE>' + str(self.bitrate_mode))
 		print('\t<BITRATE>' + str(self.bitrate))
@@ -247,6 +308,8 @@ class MainWindow(QtWidgets.QDialog):
 		# fill listviews from DB
 		self.allgenres = self.db.getColValsFromDB('Albums', 'Genre')
 		self.allartists = self.db.getColValsFromDB('Albums', 'Artist')
+		self.comboBox_genre.addItem('--- All ---')
+		self.comboBox_artist.addItem('--- All ---')
 		self.comboBox_genre.addItems(self.allgenres)
 		self.comboBox_artist.addItems(self.allartists)
 
@@ -384,13 +447,10 @@ class MainWindow(QtWidgets.QDialog):
 		# Thread filling the DB
 #		sounddir = QFileDialog.getExistingDirectory(self, 'select Music Directory', '.', QFileDialog.Option.ShowDirsOnly)
 		sounddir = os.path.join('E:\\', '000_2025', 'MusicManager_sync_workspaces', 'MusicMgr', 'Sound')
-		files = glob.glob(sounddir + '/**/*.mp3', recursive=True)
 		lAllAbums = []
-		# mp4files = glob.glob(sounddir + '/**/*.mp4', recursive=True)
-		# files = glob.glob(sounddir + '/**/*.mp?', recursive=True) ### mp4 not supported by mutagen :( -> TODO: search for another lib
+		# files = glob.glob(sounddir + '/**/*.mp4', recursive=True)
+		files = glob.glob(sounddir + '/**/*.mp?', recursive=True) ### mp4 not supported by mutagen :( -> TODO: search for another lib
 		# files = list(Path(sounddir).rglob("*.[mM][pP][34]"))
-		# if bDebug:
-			# print(str(files))
 		nFilesToProceed = len(files) # for progress bar
 		self.db.createTables()
 		if bDebug:
