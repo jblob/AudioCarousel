@@ -10,6 +10,7 @@
 /*.txt
 /*.db
 /*.log
+/copilot*
 /bkup/
 
 # VS Code
