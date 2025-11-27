@@ -37,7 +37,7 @@
    </property>
    <layout class="QVBoxLayout" name="verticalLayout_2">
     <item>
-     <widget class="QPushButton" name="pushButton_6">
+     <widget class="QPushButton" name="pushButton_albumplayer_genplaylists">
       <property name="toolTip">
        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;generate a playlist with all available songs/videos&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
       </property>
@@ -47,7 +47,7 @@
      </widget>
     </item>
     <item>
-     <widget class="QPushButton" name="pushButton_7">
+     <widget class="QPushButton" name="pushButton_albumplayer_playalbum">
       <property name="toolTip">
        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;play the random playlist starting with the last unfinished song&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
       </property>
@@ -57,21 +57,21 @@
      </widget>
     </item>
     <item>
-     <widget class="QPushButton" name="pushButton_8">
+     <widget class="QPushButton" name="pushButton_albumplayer_genplaylistspause">
       <property name="text">
        <string>pause</string>
       </property>
      </widget>
     </item>
     <item>
-     <widget class="QPushButton" name="pushButton_9">
+     <widget class="QPushButton" name="pushButton_albumplayer_stop">
       <property name="text">
        <string>stop</string>
       </property>
      </widget>
     </item>
     <item>
-     <widget class="QPushButton" name="pushButton_10">
+     <widget class="QPushButton" name="pushButton_albumplayer_savestate">
       <property name="text">
        <string>save state</string>
       </property>
