@@ -19,11 +19,12 @@ from PyQt5.QtCore import QAbstractTableModel
 import mutagen
 from mutagen.mp3 import MP3, MPEGInfo
 from mutagen.mp4 import MP4
-from mutagen.id3 import ID3
+from mutagen.id3 import ID3, APIC
 from mutagen.easyid3 import EasyID3
 
 bDebug = True
 bDebugSQL = False
+bRegenerateAlbumImages = True
 
 class StdoutRedirector:
 	def __init__(self, text_widget):
@@ -71,6 +72,7 @@ class MP3Data:
 		self.bitrate = 0
 		self.rating = 0
 		self.fullpath = ''
+		self.imagedirectory = 'images'
 
 	def data(self, player):
 		# this is only usable while playing, otherwise no QMediaMetaData is available :/
@@ -189,6 +191,7 @@ class MP3Data:
 			try:
 				# self.artist = mp4.get('artist')[0]
 				self.artist = mp4.tags['\xa9ART'][0]
+				# self.artist = mp4.tags['aART'][0] ### alternative: album artist -> use in Sampler ?
 			except:
 				pass
 			try:
@@ -239,6 +242,38 @@ class MP3Data:
 
 		return [self.title, self.artist, self.album, self.genre, self.duration, self.bCoverAvailable, self.tracknumber, self.year, self.channels, self.bitrate_mode, self.bitrate, self.rating, self.fullpath]
 		
+	def getImage(self, file):
+		img_name = 'NoImage'
+		if file.endswith('mp3'):
+			self.mpgType = 'mp3'
+		elif file.endswith('mp4'):
+			self.mpgType = 'mp4'
+		if self.mpgType == 'mp3':
+			audio = MP3(file, ID3=ID3)
+			audio2 = MP3(file, ID3=EasyID3)
+			tags  = ID3(file)
+			artist_ = audio2['artist'][0]
+			artist = artist_.replace('/', '_')
+			album_ = audio2['album'][0]
+			album = album_.replace('/', '_')
+			img_name =  os.path.join(self.imagedirectory, artist + '_' + album + '.jpg')
+			if bDebug:
+				print('<IMGNAME>' + img_name)
+			# Check if the MP3 file contains an embedded image
+			if audio.tags is not None:
+				for tag in audio.tags.values():
+					if isinstance(tag, APIC):  # Look for the APIC frame (Attached Picture)
+						# Extract the image data
+						image_data = tag.data
+						# Save the image to a file - "artist_album.jpg"
+						###img_name = audio['artist'][0] + '_' + audio['album'][0]
+						with open(img_name, 'wb') as img_file:
+							img_file.write(image_data)
+						if bDebug:
+							print('<Embedded_image>' + img_name)
+						# break
+		return img_name
+	
 	def printData(self, file):
 		print('---------------------------------------------------')
 		print('<MP3DATA>')
@@ -289,6 +324,7 @@ class MainWindow(QtWidgets.QDialog):
 		self.pushButton_database_updateDB.clicked.connect(self.pushButton_database_updateDB_run)
 		self.pushButton_database_showDB.clicked.connect(self.pushButton_database_showDB_run)
 		self.pushButton_testsqlquery.clicked.connect(self.pushButton_testsqlquery_run)
+		self.pushButton_albumplayer_playalbum.clicked.connect(self.pushButton_albumplayer_playalbum_run)
 
 		self.player.metaDataChanged.connect(self.slotMetaDataChanged)
 		self.playlist.currentIndexChanged.connect(self.slotIndexChanged)
@@ -445,7 +481,7 @@ class MainWindow(QtWidgets.QDialog):
 	
 	def pushButton_database_updateDB_run(self):
 		# Thread filling the DB
-#		sounddir = QFileDialog.getExistingDirectory(self, 'select Music Directory', '.', QFileDialog.Option.ShowDirsOnly)
+#		sounddir = QFileDialog.getExistingDirectory(self, '📁 select Music Directory', '.', QFileDialog.Option.ShowDirsOnly)
 		sounddir = os.path.join('E:\\', '000_2025', 'MusicManager_sync_workspaces', 'MusicMgr', 'Sound')
 		lAllAbums = []
 		# files = glob.glob(sounddir + '/**/*.mp4', recursive=True)
@@ -466,7 +502,9 @@ class MainWindow(QtWidgets.QDialog):
 			db.addline_tablesongs(arrMp3Data)
 			if not arrMp3Data[2] in lAllAbums:
 				lAllAbums.append(arrMp3Data[2])
-				db.addline_tablealbums(arrMp3Data)
+				if bRegenerateAlbumImages:
+					imagename = m.getImage(curfile)
+				db.addline_tablealbums(arrMp3Data, imagename)
 		if bDebug:
 			print('[Updating DB] finished')
 			print('=============================================================')
@@ -480,7 +518,7 @@ class MainWindow(QtWidgets.QDialog):
 		data2 = db.getTable('Albums')
 
 		headers1 = ['Title', 'Artist', 'Album', 'Genre', 'Duration', 'CoverAvail', 'TrackNr', 'Year', 'Channels', 'BitrateMode', 'Bitrate', 'Rating', 'Fullpath']
-		headers2 = ['Artist', 'Album', 'Genre', 'FullPath']
+		headers2 = ['Artist', 'Album', 'Genre', 'CoverPath', 'FullPath']
 
 		# Create and show the TabWindow
 		self.tab_window = TabWindow(headers1, data1, headers2, data2)
@@ -491,11 +529,20 @@ class MainWindow(QtWidgets.QDialog):
 		res = db.exec_sql(cmd, True, False, True)
 		self.textBrowser_testsqlquery.setText(res)
 		
-
+	def pushButton_albumplayer_playalbum_run(self):
+		self.apd = AlbumPlayerDlg()
+		# self.apd.exec_() ### modal dialog
+		self.apd.show() ### non-modal dialog
+		
+class AlbumPlayerDlg(QDialog):
+	def __init__(self):
+		super(AlbumPlayerDlg, self).__init__()
+		self.setWindowTitle('select album')
+		
 class TabWindow(QMainWindow):
 	def __init__(self, headers1, data1, headers2, data2):
 		super(TabWindow, self).__init__()
-		self.setWindowTitle("Tab Window")
+		self.setWindowTitle('My music Collection')
 		self.resize(600, 400)
 
 		# Create the QTabWidget
@@ -587,6 +634,7 @@ class DB:
 		ARTIST VARCHAR(255),
 		ALBUM VARCHAR(255), 
 		GENRE VARCHAR(255), 
+		COVER_PATH VARCHAR(1024),
 		FULLPATH VARCHAR(2048)
 		);"""
 
@@ -613,7 +661,7 @@ class DB:
 
 		self.exec_sql(sql)
 		
-	def addline_tablealbums(self, data):
+	def addline_tablealbums(self, data, coverpath):
 		sql  = 'INSERT INTO Albums VALUES('
 		# sql += '0, '  ### primary key !!!
 		sql += '"' + data[1] + '", '   #artist
@@ -622,6 +670,7 @@ class DB:
 #		sql += str(data[4])  + ', '    #duration -> later
 #		sql += str(data[5])  + ', '    #bCoverAvailable -> later
 #		sql += str(data[7])  + ', '    #year -> later
+		sql += '"' + coverpath + '", ' #path to coverart
 		sql += '"' + data[12] + '"); ' #fullpath
 
 		self.exec_sql(sql)
