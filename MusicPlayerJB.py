@@ -8,11 +8,11 @@ from pathlib import Path
 import sqlite3
 
 from PyQt5 import QtWidgets, uic
-from PyQt5.QtWidgets import QAction, QApplication, QLabel, QMainWindow, QMenu, QDialog, QFileDialog, QStatusBar
+from PyQt5.QtWidgets import QAction, QApplication, QLabel, QMainWindow, QMenu, QDialog, QFileDialog, QStatusBar, QPushButton, QGridLayout, QScrollArea, QWidget, QVBoxLayout
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtMultimedia import (QMediaPlayer, QMediaContent, QMediaPlaylist, QMediaMetaData)
 from PyQt5.QtCore import pyqtRemoveInputHook # see comment below
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtWidgets import QTableView, QTabWidget
 from PyQt5.QtCore import QAbstractTableModel
 
@@ -536,14 +536,57 @@ class MainWindow(QtWidgets.QDialog):
 		self.textBrowser_testsqlquery.setText(res)
 		
 	def pushButton_albumplayer_playalbum_run(self):
-		self.apd = AlbumPlayerDlg()
+		self.apd = AlbumPlayerDlg(self.db)
 		# self.apd.exec_() ### modal dialog
 		self.apd.show() ### non-modal dialog
 		
 class AlbumPlayerDlg(QDialog):
-	def __init__(self):
+	def __init__(self, db):
 		super(AlbumPlayerDlg, self).__init__()
+		self.db = db
 		self.setWindowTitle('select album')
+		self.COVER_SIZE_ABP = 150
+		maxCoversInRow = 2
+		self.allcoverpaths = self.db.getColValsFromDB('Albums', 'COVER_PATH')
+		if bDebug:
+			print('<AlbumPlayerDlg><ALLCOVERPATHS>' + str(self.allcoverpaths))
+		
+		scroll = QScrollArea(self)
+		scroll.setWidgetResizable(True)
+		content_widget = QWidget()
+		grid = QGridLayout(content_widget)
+
+		self.pbArray = []
+
+		cur_x = 0
+		cur_y = 0
+		for i in range(0, 100):
+			pb = QPushButton()
+			im = os.path.join('images', 'AC_DC_Live.jpg')
+			if not os.path.exists(im):
+				print('<E_IMAGE_NOT_FOUND>' + im)
+				sys.exit(-1)
+			pixmap = QPixmap(im)
+			pixmap = pixmap.scaled(self.COVER_SIZE_ABP, self.COVER_SIZE_ABP)
+			ButtonIcon = QIcon(pixmap)
+			pb.setIconSize(pixmap.rect().size());
+			pb.setIcon(ButtonIcon)
+			pb.setFixedSize(self.COVER_SIZE_ABP, self.COVER_SIZE_ABP)
+			grid.addWidget(pb, cur_x, cur_y)
+			if bDebug:
+				print('<AlbumPlayerDlg>add widget at (' + str(cur_x) + ', ' + str(cur_y) + ')')
+			if cur_y > maxCoversInRow:
+				cur_y = 0
+				cur_x += 1
+			else:
+				cur_y += 1
+		# Set the content widget as the scroll area's widget
+		scroll.setWidget(content_widget)
+
+		# Set the layout for the dialog
+		layout = QVBoxLayout(self)
+		layout.addWidget(scroll)
+		self.setLayout(layout)
 		
 class TabWindow(QMainWindow):
 	def __init__(self, headers1, data1, headers2, data2):
