@@ -62,6 +62,7 @@ class MP3Data:
 		self.title = ''
 		self.artist = ''
 		self.album = ''
+		self.albumartist = ''
 		self.genre = ''
 		self.duration = 0
 		self.bCoverAvailable = False
@@ -117,6 +118,10 @@ class MP3Data:
 				pass
 			try:
 				self.artist = audio['artist'][0]
+			except:
+				pass
+			try:
+				self.albumartist = audio['albumartist'][0]
 			except:
 				pass
 			try:
@@ -240,7 +245,7 @@ class MP3Data:
 			# }
 			# print(str(metadata))
 
-		return [self.title, self.artist, self.album, self.genre, self.duration, self.bCoverAvailable, self.tracknumber, self.year, self.channels, self.bitrate_mode, self.bitrate, self.rating, self.fullpath]
+		return [self.title, self.artist, self.albumartist, self.album, self.genre, self.duration, self.bCoverAvailable, self.tracknumber, self.year, self.channels, self.bitrate_mode, self.bitrate, self.rating, self.fullpath]
 		
 	def getImage(self, file):
 		img_name = 'NoImage'
@@ -280,6 +285,7 @@ class MP3Data:
 		print('\t<MPGTYPE>' + self.mpgType)
 		print('\t<TITLE>' + self.title)
 		print('\t<ARTIST>' + self.artist)
+		print('\t<ALBUMARTIST>' + self.albumartist)
 		print('\t<ALBUM>' + self.album)
 		print('\t<GENRE>' + self.genre)
 		print('\t<DURATION>' + str(self.duration))
@@ -517,8 +523,8 @@ class MainWindow(QtWidgets.QDialog):
 		data1 = db.getTable('Songs')
 		data2 = db.getTable('Albums')
 
-		headers1 = ['Title', 'Artist', 'Album', 'Genre', 'Duration', 'CoverAvail', 'TrackNr', 'Year', 'Channels', 'BitrateMode', 'Bitrate', 'Rating', 'Fullpath']
-		headers2 = ['Artist', 'Album', 'Genre', 'CoverPath', 'FullPath']
+		headers1 = ['Title', 'Artist', 'AlbumArtist', 'Album', 'Genre', 'Duration', 'CoverAvail', 'TrackNr', 'Year', 'Channels', 'BitrateMode', 'Bitrate', 'Rating', 'Fullpath']
+		headers2 = ['Artist', 'AlbumArtist', 'Album', 'Genre', 'CoverPath', 'FullPath']
 
 		# Create and show the TabWindow
 		self.tab_window = TabWindow(headers1, data1, headers2, data2)
@@ -610,6 +616,7 @@ class DB:
 		(
 		TITLE VARCHAR(255), 
 		ARTIST VARCHAR(255),
+		ALBUMARTIST VARCHAR(255),
 		ALBUM VARCHAR(255), 
 		GENRE VARCHAR(255), 
 		DURATION INTEGER,
@@ -633,6 +640,7 @@ class DB:
 		(
 		ARTIST VARCHAR(255),
 		ALBUM VARCHAR(255), 
+		ALBUMARTIST VARCHAR(255), 
 		GENRE VARCHAR(255), 
 		COVER_PATH VARCHAR(1024),
 		FULLPATH VARCHAR(2048)
@@ -647,17 +655,18 @@ class DB:
 		# sql += '0, '  ### primary key !!!
 		sql += '"' + data[0] + '", '   #title
 		sql += '"' + data[1] + '", '   #artist
-		sql += '"' + data[2] + '", '   #album
-		sql += '"' + data[3] + '", '   #genre
-		sql += str(data[4])  + ', '    #duration
-		sql += str(data[5])  + ', '    #bCoverAvailable
-		sql += str(data[6])  + ', '    #tracknumber
-		sql += str(data[7])  + ', '    #year
-		sql += str(data[8])  + ', '    #channels
-		sql += '"' + str(data[9])  + '", '    #bitrate_mode
-		sql += str(data[10])  + ', '   #bitrate
-		sql += str(data[11])  + ', '   #rating
-		sql += '"' + data[12] + '"); ' #fullpath
+		sql += '"' + data[2] + '", '   #albumartist
+		sql += '"' + data[3] + '", '   #album
+		sql += '"' + data[4] + '", '   #genre
+		sql += str(data[5])  + ', '    #duration
+		sql += str(data[6])  + ', '    #bCoverAvailable
+		sql += str(data[7])  + ', '    #tracknumber
+		sql += str(data[8])  + ', '    #year
+		sql += str(data[9])  + ', '    #channels
+		sql += '"' + str(data[10])  + '", '    #bitrate_mode
+		sql += str(data[11])  + ', '   #bitrate
+		sql += str(data[12])  + ', '   #rating
+		sql += '"' + data[13] + '"); ' #fullpath
 
 		self.exec_sql(sql)
 		
@@ -665,13 +674,15 @@ class DB:
 		sql  = 'INSERT INTO Albums VALUES('
 		# sql += '0, '  ### primary key !!!
 		sql += '"' + data[1] + '", '   #artist
-		sql += '"' + data[2] + '", '   #album
-		sql += '"' + data[3] + '", '   #genre
-#		sql += str(data[4])  + ', '    #duration -> later
-#		sql += str(data[5])  + ', '    #bCoverAvailable -> later
-#		sql += str(data[7])  + ', '    #year -> later
+		sql += '"' + data[2] + '", '   #albumartist
+		sql += '"' + data[3] + '", '   #album
+		sql += '"' + data[4] + '", '   #genre
+#		sql += str(data[5])  + ', '    #duration -> later
+#		sql += str(data[6])  + ', '    #bCoverAvailable -> later
+#		sql += str(data[8])  + ', '    #year -> later
+#		sql += str(bIsSampler)  + ', '    #bIsSampler -> later ### how to detect ? special directory ? Artist<->Album Artist ?
 		sql += '"' + coverpath + '", ' #path to coverart
-		sql += '"' + data[12] + '"); ' #fullpath
+		sql += '"' + data[13] + '"); ' #fullpath
 
 		self.exec_sql(sql)
 		
