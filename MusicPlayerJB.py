@@ -730,23 +730,33 @@ class DB:
 		self.exec_sql(sql)
 		
 	def getTable(self, table):
-		sql = 'SELECT * FROM ' + table + ';'
-		self.exec_sql(sql, False)
+		rows = []
+		
+		try:
+			sql = 'SELECT * FROM ' + table + ';'
+			self.exec_sql(sql, False)
 
-		rows = self.cursor.fetchall()
-		self.conn.close()
+			rows = self.cursor.fetchall()
+			self.conn.close()
+		except:
+			if bDebug:
+				print('<getTable>Error: ' + table + 'not found')
 		
 		return rows
 		
 	def getColValsFromDB(self, table, colname):
 		retval = []
-		sql = 'SELECT ' + colname + ' FROM ' + table
-		self.exec_sql(sql, False)
-		rows = self.cursor.fetchall()
-		for r in rows:
-			if not r[0] in retval:
-				retval.append(r[0])
-		self.conn.close()
+		try:
+			sql = 'SELECT ' + colname + ' FROM ' + table
+			self.exec_sql(sql, False)
+			rows = self.cursor.fetchall()
+			for r in rows:
+				if not r[0] in retval:
+					retval.append(r[0])
+			self.conn.close()
+		except:
+			if bDebug:
+				print('<getColValsFromDB>Error: ' + table + 'not found')
 		
 		if bDebug:
 			print('<getGenresFromDB>' + str(retval))
