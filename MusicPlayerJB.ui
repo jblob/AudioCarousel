@@ -6,12 +6,15 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1252</width>
-    <height>867</height>
+    <width>1248</width>
+    <height>858</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>JB Music Player</string>
+  </property>
+  <property name="locale">
+   <locale language="German" country="Germany"/>
   </property>
   <widget class="QLabel" name="label">
    <property name="geometry">
@@ -380,6 +383,80 @@
      <width>691</width>
      <height>41</height>
     </rect>
+   </property>
+  </widget>
+  <widget class="QComboBox" name="comboBox_selectconfig">
+   <property name="geometry">
+    <rect>
+     <x>830</x>
+     <y>670</y>
+     <width>221</width>
+     <height>22</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="pushButton_config_editconfig">
+   <property name="geometry">
+    <rect>
+     <x>830</x>
+     <y>700</y>
+     <width>141</width>
+     <height>24</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>edit config</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="pushButton_config_newconfig">
+   <property name="geometry">
+    <rect>
+     <x>830</x>
+     <y>730</y>
+     <width>141</width>
+     <height>24</height>
+    </rect>
+   </property>
+   <property name="locale">
+    <locale language="Geez" country="Ethiopia"/>
+   </property>
+   <property name="text">
+    <string>new config</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="pushButton_config_deleteconfig">
+   <property name="geometry">
+    <rect>
+     <x>830</x>
+     <y>760</y>
+     <width>141</width>
+     <height>24</height>
+    </rect>
+   </property>
+   <property name="contextMenuPolicy">
+    <enum>Qt::ActionsContextMenu</enum>
+   </property>
+   <property name="layoutDirection">
+    <enum>Qt::LeftToRight</enum>
+   </property>
+   <property name="locale">
+    <locale language="German" country="Germany"/>
+   </property>
+   <property name="text">
+    <string>delete config</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="pushButton_config_setasdefault">
+   <property name="geometry">
+    <rect>
+     <x>1060</x>
+     <y>670</y>
+     <width>111</width>
+     <height>24</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>set as default</string>
    </property>
   </widget>
  </widget>

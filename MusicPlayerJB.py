@@ -1,14 +1,16 @@
 import sys
 import os
+import re
 import subprocess
 import glob
 import random
+import shutil
 from subprocess import Popen, PIPE, STDOUT
 from pathlib import Path
 import sqlite3
 
 from PyQt5 import QtWidgets, uic
-from PyQt5.QtWidgets import QAction, QApplication, QLabel, QMainWindow, QMenu, QDialog, QFileDialog, QStatusBar, QPushButton, QGridLayout, QScrollArea, QWidget, QVBoxLayout
+from PyQt5.QtWidgets import QAction, QApplication, QLabel, QMainWindow, QMenu, QDialog, QFileDialog, QStatusBar, QPushButton, QGridLayout, QScrollArea, QWidget, QVBoxLayout, QDialogButtonBox, QMessageBox
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtMultimedia import (QMediaPlayer, QMediaContent, QMediaPlaylist, QMediaMetaData)
 from PyQt5.QtCore import pyqtRemoveInputHook # see comment below
@@ -22,8 +24,11 @@ from mutagen.mp4 import MP4
 from mutagen.id3 import ID3, APIC
 from mutagen.easyid3 import EasyID3
 
+# from typing import NamedTuple
+
 bDebug = True
 bDebugSQL = False
+bDebugCfg = True
 bRegenerateAlbumImages = True
 
 class StdoutRedirector:
@@ -117,19 +122,20 @@ class MP3Data:
 			except:
 				pass
 			try:
-				self.artist = audio['artist'][0]
+				self.artist = audio['artist'][0].replace('"','')
 			except:
 				pass
 			try:
-				self.albumartist = audio['albumartist'][0]
+				self.albumartist = audio['albumartist'][0].replace('"','')
 			except:
 				pass
 			try:
-				self.album = audio['album'][0]
+				self.album = audio['album'][0].replace('"','')
+				# print('<DBG>' + self.album)
 			except:
 				pass
 			try:
-				self.genre = audio['genre'][0]
+				self.genre = audio['genre'][0].replace('"','')
 			except:
 				pass
 			try:
@@ -258,9 +264,9 @@ class MP3Data:
 			audio2 = MP3(file, ID3=EasyID3)
 			tags  = ID3(file)
 			artist_ = audio2['artist'][0]
-			artist = artist_.replace('/', '_')
+			artist = artist_.replace('/', '_').replace('"','')
 			album_ = audio2['album'][0]
-			album = album_.replace('/', '_')
+			album = album_.replace('/', '_').replace('"','')
 			img_name =  os.path.join(self.imagedirectory, artist + '_' + album + '.jpg')
 			if bDebug:
 				print('<IMGNAME>' + img_name)
@@ -301,20 +307,25 @@ class MP3Data:
 		print('---------------------------------------------------')
 		
 class MainWindow(QtWidgets.QDialog):
-	def __init__(self, db):
+	def __init__(self, configs, lConfigs, startconfig):
 		super(MainWindow, self).__init__()
 		self.COVER_SIZE = 150
 		uic.loadUi('MusicPlayerJB.ui', self)
 		self.setFixedSize(1400,810)
 		self.label_cover.setFixedSize(self.COVER_SIZE, self.COVER_SIZE)
 		
-		self.db = db
+		self.configs = configs
+		self.lConfigs = lConfigs
 		
+		self.curConfig      = startconfig
+		self.db             = DB(self.configs.dCfgDbname[startconfig])
+		self.randomplaylist = self.configs.dCfgRandomplaylist[startconfig]
+		self.sounddir       = self.configs.dCfgSounddir[startconfig]
+
 		self.bPlaylistNeedsSaving = False
 		self.player = QMediaPlayer()
 		self.playlist = QMediaPlaylist()
 		pyqtRemoveInputHook() # otherwise no debugging with pdb possible :/
-		self.randomplaylist    = 'playlist_random_cur.m3u'
 		self.randomplaylistgen = self.randomplaylist
 		# self.randomplaylistgen = 'playlist_random_gen.m3u' #TODO: these 2 should be the same file - only use different ones for testing
 		self.randomplayliststate = self.getPlaylistSavedState(self.randomplaylistgen)
@@ -331,6 +342,10 @@ class MainWindow(QtWidgets.QDialog):
 		self.pushButton_database_showDB.clicked.connect(self.pushButton_database_showDB_run)
 		self.pushButton_testsqlquery.clicked.connect(self.pushButton_testsqlquery_run)
 		self.pushButton_albumplayer_playalbum.clicked.connect(self.pushButton_albumplayer_playalbum_run)
+		self.pushButton_config_editconfig.clicked.connect(self.pushButton_config_editconfig_run)
+		self.pushButton_config_newconfig.clicked.connect(self.pushButton_config_newconfig_run)
+		self.pushButton_config_deleteconfig.clicked.connect(self.pushButton_config_deleteconfig_run)
+		self.pushButton_config_setasdefault.clicked.connect(self.pushButton_config_setasdefault_run)
 
 		self.player.metaDataChanged.connect(self.slotMetaDataChanged)
 		self.playlist.currentIndexChanged.connect(self.slotIndexChanged)
@@ -347,7 +362,18 @@ class MainWindow(QtWidgets.QDialog):
 		self.verticalLayout_statusbar.addWidget(self.statusBar)
 		self.statusBar.showMessage('------------------------------------')
 		
+		self.updateListViews()
+		
+		self.comboBox_selectconfig.currentTextChanged.connect(self.comboBox_selectconfig_cfgchanged_t)
+		
+		# fill listview from config file
+		self.comboBox_selectconfig.addItems(lConfigs)
+		self.comboBox_selectconfig.setCurrentText(startconfig)
+		
+	def updateListViews(self):
 		# fill listviews from DB
+		self.comboBox_genre.clear()
+		self.comboBox_artist.clear()
 		self.allgenres = self.db.getColValsFromDB('Albums', 'Genre')
 		self.allartists = self.db.getColValsFromDB('Albums', 'Artist')
 		self.comboBox_genre.addItem('--- All ---')
@@ -488,11 +514,10 @@ class MainWindow(QtWidgets.QDialog):
 	def pushButton_database_updateDB_run(self):
 		# Thread filling the DB
 #		sounddir = QFileDialog.getExistingDirectory(self, '📁 select Music Directory', '.', QFileDialog.Option.ShowDirsOnly)
-		sounddir = os.path.join('E:\\', '000_2025', 'MusicManager_sync_workspaces', 'MusicMgr', 'Sound')
 		lAllAbums = []
-		# files = glob.glob(sounddir + '/**/*.mp4', recursive=True)
-		files = glob.glob(sounddir + '/**/*.mp?', recursive=True) ### mp4 not supported by mutagen :( -> TODO: search for another lib
-		# files = list(Path(sounddir).rglob("*.[mM][pP][34]"))
+		# files = glob.glob(self.sounddir + '/**/*.mp4', recursive=True)
+		files = glob.glob(self.sounddir + '/**/*.mp?', recursive=True) ### mp4 not supported by mutagen :( -> TODO: search for another lib
+		# files = list(Path(self.sounddir).rglob("*.[mM][pP][34]"))
 		nFilesToProceed = len(files) # for progress bar
 		self.db.createTables()
 		if bDebug:
@@ -503,25 +528,32 @@ class MainWindow(QtWidgets.QDialog):
 				print('\tprocessing: ' + curfile)
 			m = MP3Data()
 			arrMp3Data = m.getTagsFromFile(curfile)
+			# arrMp3DataNew = []
+			# for s in arrMp3Data:
+				# if isinstance(s, str):
+					# newval = s.replace('"','\'')
+				# else:
+					# newval = s
+				# arrMp3DataNew.append(newval)
 			# if bDebug:
 				# m.printData(curfile)
-			db.addline_tablesongs(arrMp3Data)
+			self.db.addline_tablesongs(arrMp3Data)
 			if not arrMp3Data[2] in lAllAbums:
 				lAllAbums.append(arrMp3Data[2])
 				if bRegenerateAlbumImages:
 					imagename = m.getImage(curfile)
-				db.addline_tablealbums(arrMp3Data, imagename)
+				self.db.addline_tablealbums(arrMp3Data, imagename)
 		if bDebug:
 			print('[Updating DB] finished')
 			print('=============================================================')
 
 		with open('sql.log', 'w') as fout:
-			fout.write(db.sqltext_dbg)
+			fout.write(self.db.sqltext_dbg)
 			fout.close()
 			
 	def pushButton_database_showDB_run(self):
-		data1 = db.getTable('Songs')
-		data2 = db.getTable('Albums')
+		data1 = self.db.getTable('Songs')
+		data2 = self.db.getTable('Albums')
 
 		headers1 = ['Title', 'Artist', 'AlbumArtist', 'Album', 'Genre', 'Duration', 'CoverAvail', 'TrackNr', 'Year', 'Channels', 'BitrateMode', 'Bitrate', 'Rating', 'Fullpath']
 		headers2 = ['Artist', 'AlbumArtist', 'Album', 'Genre', 'CoverPath', 'FullPath']
@@ -532,7 +564,7 @@ class MainWindow(QtWidgets.QDialog):
 
 	def pushButton_testsqlquery_run(self):
 		cmd = self.lineEdit_testsqlquery.text()
-		res = db.exec_sql(cmd, True, False, True)
+		res = self.db.exec_sql(cmd, True, False, True)
 		self.textBrowser_testsqlquery.setText(res)
 		
 	def pushButton_albumplayer_playalbum_run(self):
@@ -540,6 +572,100 @@ class MainWindow(QtWidgets.QDialog):
 		# self.apd.exec_() ### modal dialog
 		self.apd.show() ### non-modal dialog
 		
+	# def comboBox_selectconfig_cfgchanged_i(self, value):
+		# if bDebug:
+			# print('<comboBox_selectconfig_cfgchanged_i>' + str(value))
+		
+	def comboBox_selectconfig_cfgchanged_t(self, value):
+		if bDebug:
+			print('<comboBox_selectconfig_cfgchanged_t>' + value)
+		self.curConfig      = value
+		self.db             = DB(self.configs.dCfgDbname[value])
+		self.randomplaylist = self.configs.dCfgRandomplaylist[value]
+		self.sounddir       = self.configs.dCfgSounddir[value]
+		self.updateListViews()
+		
+	def pushButton_config_editconfig_run(self):
+		self.dlg = QDialog(self)
+		uic.loadUi('Dlg_editConfig.ui', self.dlg)
+		self.dlg.lineEdit_configname.setReadOnly(True)
+		self.dlg.buttonBox_okcancel.clicked.connect(self.buttonBox_okcancel_run)
+		self.dlg.lineEdit_configname.setText(self.curConfig)
+		self.dlg.lineEdit_database.setText(self.configs.dCfgDbname[self.curConfig])
+		self.dlg.lineEdit_sounddir.setText(self.sounddir)
+		self.dlg.lineEdit_randomplaylist.setText(self.randomplaylist)
+		self.dlg.exec_()
+		
+	def pushButton_config_newconfig_run(self):
+		self.dlg = QDialog(self)
+		uic.loadUi('Dlg_editConfig.ui', self.dlg)
+		self.dlg.buttonBox_okcancel.clicked.connect(self.buttonBox_okcancel2_run)
+		self.dlg.lineEdit_configname.setText('enter config name')
+		self.dlg.lineEdit_database.setText('enter path to DB')
+		self.dlg.lineEdit_sounddir.setText('enter path to music library')
+		self.dlg.lineEdit_randomplaylist.setText('enter name of playlist')
+		self.dlg.exec_()
+		
+	def pushButton_config_deleteconfig_run(self):
+		if len(lConfigs) < 2:
+			msg = QMessageBox()
+			msg.setIcon(QMessageBox.Icon.Warning)
+			msg.setText('Cannot delete Config since no other config is available')
+			msg.setWindowTitle('Warning')
+			msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+			msg.exec()
+		else:
+			if self.curConfig == self.configs.defaultconfig:
+				bChangeDefaultConfig = True
+			else:
+				bChangeDefaultConfig = False
+			self.lConfigs.remove(self.curConfig)
+			self.curConfig = self.lConfigs[0]
+			self.comboBox_selectconfig.removeItem(self.comboBox_selectconfig.currentIndex())
+			self.comboBox_selectconfig.setCurrentText(self.curConfig)
+			if bChangeDefaultConfig:
+				self.configs.defaultconfig = self.curConfig
+			self.configs.saveConfigfile(True)
+		
+	def pushButton_config_setasdefault_run(self):
+		self.configs.defaultconfig = self.comboBox_selectconfig.currentText()
+		print('<DBGXXX>' + self.configs.defaultconfig)
+		self.configs.saveConfigfile()
+	
+	def buttonBox_okcancel_run(self, button):
+		role = self.dlg.buttonBox_okcancel.standardButton(button)
+		if role == QDialogButtonBox.Ok:
+			self.configs.dCfgDbname[self.curConfig] = self.dlg.lineEdit_database.text()
+			self.configs.dCfgSounddir[self.curConfig] = self.dlg.lineEdit_sounddir.text()
+			self.configs.dCfgRandomplaylist[self.curConfig] = self.dlg.lineEdit_randomplaylist.text()
+			self.configs.saveConfigfile()
+
+	def buttonBox_okcancel2_run(self, button):
+		role = self.dlg.buttonBox_okcancel.standardButton(button)
+		if role == QDialogButtonBox.Ok:
+			cur_config = self.dlg.lineEdit_configname.text()
+			self.configs.dCfgDbname[cur_config] = self.dlg.lineEdit_database.text()
+			self.configs.dCfgSounddir[cur_config] = self.dlg.lineEdit_sounddir.text()
+			self.configs.dCfgRandomplaylist[cur_config] = self.dlg.lineEdit_randomplaylist.text()
+			# TODO: check if values are plausible
+			if cur_config in self.lConfigs:
+				print('config already exists: ' + cur_config + ' -> skipped')
+				return
+			elif os.path.exists(self.configs.dCfgDbname[cur_config]):
+				print('DB already exists: ' + self.configs.dCfgDbname[cur_config] + ' -> skipped')
+				return
+			elif not os.path.exists(self.configs.dCfgSounddir[cur_config]):
+				print('Sound directory not found: ' + self.configs.dCfgSounddir[cur_config] + ' -> skipped')
+				return
+			elif os.path.exists(self.configs.dCfgRandomplaylist[cur_config]):
+				print('Playlist already exists: ' + self.configs.dCfgRandomplaylist[cur_config] + ' -> skipped')
+				return
+			else:
+				self.lConfigs.append(cur_config)
+				self.configs.saveConfigfile()
+				if bDebug:
+					print ('<config created>' + cur_config)
+
 class AlbumPlayerDlg(QDialog):
 	def __init__(self, db):
 		super(AlbumPlayerDlg, self).__init__()
@@ -615,11 +741,11 @@ class TabWindow(QMainWindow):
 		tab_widget.addTab(table_view1, 'Songs')
 		tab_widget.addTab(table_view2, 'Albums')
 		
-
 class DB:		
-	def __init__(self):
+	def __init__(self, dbname):
+		self.dbname = dbname
 		# Verbindung zur Datenbank herstellen
-		self.conn = sqlite3.connect('sound.db')
+		self.conn = sqlite3.connect(self.dbname)
 		# Cursor-Objekt (zum Zugriff auf die Datenbank)
 		self.cursor = self.conn.cursor()
 		self.conn.close()
@@ -629,7 +755,7 @@ class DB:
 		ret_text = ''
 		try:
 			# Verbindung zur Datenbank herstellen
-			self.conn = sqlite3.connect('sound.db')
+			self.conn = sqlite3.connect(self.dbname)
 			# Cursor-Objekt (zum Zugriff auf die Datenbank)
 			self.cursor = self.conn.cursor()
 			if bDebugSQL:
@@ -759,7 +885,7 @@ class DB:
 				print('<getColValsFromDB>Error: ' + table + 'not found')
 		
 		if bDebug:
-			print('<getGenresFromDB>' + str(retval))
+			print('<getColValsFromDB>' + str(retval))
 			
 		return retval
 		
@@ -792,9 +918,79 @@ class TableModel(QAbstractTableModel):
 			elif orientation == Qt.Vertical:  # Row numbers
 				return str(section + 1)
 
+class Config:
+	def __init__(self):
+		# default values for test
+		# if os.name == 'posix':
+			# self.dbname         = 'sound.linux.db'
+			# self.sounddir       = os.path.join('home', 'blju', 'Sound')
+			# self.randomplaylist = 'playlist_random_cur_linux.m3u' 
+		# else:
+			# self.dbname         = 'sound.windows.db'
+			# self.sounddir       = os.path.join('E:\\', '000_2025', 'MusicManager_sync_workspaces', 'MusicMgr', 'Sound')
+			# self.randomplaylist = 'playlist_random_cur_windows.m3u'
+		self.configfile = 'configs.cfg'
+		self.lConfigs = []
+		self.dCfgDbname = {}
+		self.dCfgSounddir = {}
+		self.dCfgRandomplaylist = {}
+		self.defaultconfig = ''
+		
+	def readConfigfile(self):
+		
+		with open(self.configfile, 'r') as fin:
+			lines = fin.readlines()
+			fin.close()
+		for l in lines:
+			match0 = re.search(r'<defaultconfig>\s*(.+)\s*</defaultconfig>', l)
+			match1 = re.search(r'<config>', l)
+			match2 = re.search(r'<name>\s*(.+)\s*</name>', l)
+			match3 = re.search(r'<dbname>\s*(.+)\s*</dbname>', l)
+			match4 = re.search(r'<sounddir>\s*(.+)\s*</sounddir>', l)
+			match5 = re.search(r'<randomplaylist>\s*(.+)\s*</randomplaylist>', l)
+			match6 = re.search(r'</config>', l)
+			if match0:
+				self.defaultconfig = match0.group(1)
+			elif match1:
+				bConfigSectionActive = True
+			elif match2:
+				cur_config = match2.group(1)
+				self.lConfigs.append(cur_config)
+			elif match3:
+				self.dCfgDbname[cur_config] = match3.group(1)
+			elif match4:
+				self.dCfgSounddir[cur_config] = match4.group(1)
+			elif match5:
+				self.dCfgRandomplaylist[cur_config] = match5.group(1)
+			elif match6:
+				bConfigSectionActive = False
+				# config = ConfigItem(cur_config, cfg_dbname, cfg_sounddir, cfg_randomplaylist)
+				# dConfigs.append(config)
+		return self.lConfigs, self.defaultconfig
+		
+	def saveConfigfile(self, bWithBackup = False):
+	# def saveConfigfile(self, defaultconfig, lConfigs):
+		if bWithBackup:
+			backupfile = self.configfile + '.bkup'
+			shutil.copyfile(self.configfile, backupfile)
+		text = ''
+		text += '<defaultconfig>' + self.defaultconfig + '</defaultconfig>\n\n'
+		for cfg in self.lConfigs:
+			text += '<config>\n'
+			text += '<name>' + cfg + '</name>\n'
+			text += '<dbname>' + self.dCfgDbname[cfg] + '</dbname>\n'
+			text += '<sounddir>' + self.dCfgSounddir[cfg] + '</sounddir>\n'
+			text += '<randomplaylist>' + self.dCfgRandomplaylist[cfg] + '</randomplaylist>\n'
+			text += '</config>\n\n'
+		
+		fout = open(self.configfile, 'w')
+		fout.write(text)
+		fout.close()
+
 if __name__ == '__main__':
 	app = QtWidgets.QApplication(sys.argv)
-	db = DB()
-	window = MainWindow(db)
+	conf = Config()
+	lConfigs, defaultconfig = conf.readConfigfile()
+	window = MainWindow(conf, lConfigs, defaultconfig)
 	window.show()
 	sys.exit(app.exec_())
