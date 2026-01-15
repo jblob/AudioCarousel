@@ -12,6 +12,8 @@
 /*.log
 /copilot*
 /bkup/
+*.bkup
+/images/
 
 # VS Code
 /.vscode/settings.json
