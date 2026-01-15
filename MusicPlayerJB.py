@@ -364,6 +364,7 @@ class MainWindow(QtWidgets.QDialog):
 		
 		self.updateListViews()
 		
+		# self.comboBox_selectconfig.currentIndexChanged.connect(self.comboBox_selectconfig_cfgchanged_i)
 		self.comboBox_selectconfig.currentTextChanged.connect(self.comboBox_selectconfig_cfgchanged_t)
 		
 		# fill listview from config file
@@ -629,7 +630,6 @@ class MainWindow(QtWidgets.QDialog):
 		
 	def pushButton_config_setasdefault_run(self):
 		self.configs.defaultconfig = self.comboBox_selectconfig.currentText()
-		print('<DBGXXX>' + self.configs.defaultconfig)
 		self.configs.saveConfigfile()
 	
 	def buttonBox_okcancel_run(self, button):
@@ -971,7 +971,7 @@ class Config:
 	def saveConfigfile(self, bWithBackup = False):
 	# def saveConfigfile(self, defaultconfig, lConfigs):
 		if bWithBackup:
-			backupfile = self.configfile + '.bkup'
+			backupfile = os.path.join('bkup', self.configfile + '.bkup')
 			shutil.copyfile(self.configfile, backupfile)
 		text = ''
 		text += '<defaultconfig>' + self.defaultconfig + '</defaultconfig>\n\n'
