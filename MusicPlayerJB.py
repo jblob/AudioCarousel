@@ -511,6 +511,7 @@ class MainWindow(QtWidgets.QDialog):
 			self.savePlaylistState(self.playlist, self.randomplaylist)
 		if bDebug:
 			print('Exiting ...')
+		self.db.conn.close()
 	
 	def pushButton_database_updateDB_run(self):
 		# Thread filling the DB
@@ -673,9 +674,9 @@ class AlbumPlayerDlg(QDialog):
 		self.setWindowTitle('select album')
 		self.COVER_SIZE_ABP = 150
 		maxCoversInRow = 2
-		self.allcoverpaths = self.db.getColValsFromDB('Albums', 'COVER_PATH')
-		if bDebug:
-			print('<AlbumPlayerDlg><ALLCOVERPATHS>' + str(self.allcoverpaths))
+		# self.allcoverpaths = self.db.getColValsFromDB('Albums', 'COVER_PATH')
+		# if bDebug:
+			# print('<AlbumPlayerDlg><ALLCOVERPATHS>' + str(self.allcoverpaths))
 		
 		scroll = QScrollArea(self)
 		scroll.setWidgetResizable(True)
@@ -686,12 +687,36 @@ class AlbumPlayerDlg(QDialog):
 
 		cur_x = 0
 		cur_y = 0
-		for i in range(0, 100):
+		
+		##
+		d_imagpaths = {}
+		# cmd = 'select ARTIST, COVER_PATH from ALBUMS'
+		cmd = 'select * from ALBUMS'
+		try:
+			conn = sqlite3.connect(self.db.dbname)
+			self.cursor = conn.cursor()
+			print('<SQL>' + cmd)
+			self.cursor.execute(cmd)
+			conn.commit()
+##			d_imagpaths = {key: value for key, value in self.cursor.fetchall()}
+##			print('<d_imagpaths>' + str(d_imagpaths))
+			album_table = self.cursor.fetchall() ### list of tuples !
+			conn.close()
+###			print(str(album_table))
+			nr_albums = len(album_table)
+		except sqlite3.Error as e:
+			ret_text += str(e)
+			print(e)
+			sys.exit(-1)
+		##
+		
+		for i in range(0, nr_albums):
 			pb = QPushButton()
-			im = os.path.join('images', 'AC_DC_Live.jpg')
+			# im = os.path.join('images', 'AC_DC_Live.jpg')
+			im = album_table[i][4]
 			if not os.path.exists(im):
-				print('<E_IMAGE_NOT_FOUND>' + im)
-				sys.exit(-1)
+				print('<E_IMAGE_NOT_FOUND>' + im + ' [maybe you should update the database]')
+				sys.exit(-1) # TODO: do not exit, but use a standard image instead .. or try to extract it from the songs of the album ... or write only the album/artist name on the button ...
 			pixmap = QPixmap(im)
 			pixmap = pixmap.scaled(self.COVER_SIZE_ABP, self.COVER_SIZE_ABP)
 			ButtonIcon = QIcon(pixmap)
@@ -699,8 +724,8 @@ class AlbumPlayerDlg(QDialog):
 			pb.setIcon(ButtonIcon)
 			pb.setFixedSize(self.COVER_SIZE_ABP, self.COVER_SIZE_ABP)
 			grid.addWidget(pb, cur_x, cur_y)
-			if bDebug:
-				print('<AlbumPlayerDlg>add widget at (' + str(cur_x) + ', ' + str(cur_y) + ')')
+			# if bDebug:
+				# print('<AlbumPlayerDlg>add widget at (' + str(cur_x) + ', ' + str(cur_y) + ')')
 			if cur_y > maxCoversInRow:
 				cur_y = 0
 				cur_x += 1
