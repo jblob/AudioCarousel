@@ -687,7 +687,6 @@ class AlbumPlayerDlg(QDialog):
 		cur_x = 0
 		cur_y = 0
 		
-		##
 		d_imagpaths = {}
 		cmd = 'select * from ALBUMS'
 		try:
@@ -702,8 +701,8 @@ class AlbumPlayerDlg(QDialog):
 		except sqlite3.Error as e:
 			ret_text += str(e)
 			print(e)
-			sys.exit(-1)
-		##
+			# sys.exit(-1)
+			return
 
 		for i in range(0, nr_albums):
 			pb = QPushButton()
@@ -883,7 +882,7 @@ class DB:
 #		sql += str(data[8])  + ', '    #year -> later
 #		sql += str(bIsSampler)  + ', '    #bIsSampler -> later ### how to detect ? special directory ? Artist<->Album Artist ?
 		sql += '"' + coverpath + '", ' #path to coverart
-		sql += '"' + data[13] + '"); ' #fullpath
+		sql += '"' + os.path.dirname(data[13]) + '"); ' #fullpath
 
 		self.exec_sql(sql)
 		
