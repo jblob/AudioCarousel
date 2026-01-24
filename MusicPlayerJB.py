@@ -24,6 +24,8 @@ from mutagen.mp4 import MP4
 from mutagen.id3 import ID3, APIC
 from mutagen.easyid3 import EasyID3
 
+from functools import partial
+
 # from typing import NamedTuple
 
 bDebug = True
@@ -674,10 +676,7 @@ class AlbumPlayerDlg(QDialog):
 		self.setWindowTitle('select album')
 		self.COVER_SIZE_ABP = 150
 		maxCoversInRow = 2
-		# self.allcoverpaths = self.db.getColValsFromDB('Albums', 'COVER_PATH')
-		# if bDebug:
-			# print('<AlbumPlayerDlg><ALLCOVERPATHS>' + str(self.allcoverpaths))
-		
+
 		scroll = QScrollArea(self)
 		scroll.setWidgetResizable(True)
 		content_widget = QWidget()
@@ -690,7 +689,6 @@ class AlbumPlayerDlg(QDialog):
 		
 		##
 		d_imagpaths = {}
-		# cmd = 'select ARTIST, COVER_PATH from ALBUMS'
 		cmd = 'select * from ALBUMS'
 		try:
 			conn = sqlite3.connect(self.db.dbname)
@@ -698,39 +696,45 @@ class AlbumPlayerDlg(QDialog):
 			print('<SQL>' + cmd)
 			self.cursor.execute(cmd)
 			conn.commit()
-##			d_imagpaths = {key: value for key, value in self.cursor.fetchall()}
-##			print('<d_imagpaths>' + str(d_imagpaths))
 			album_table = self.cursor.fetchall() ### list of tuples !
 			conn.close()
-###			print(str(album_table))
 			nr_albums = len(album_table)
 		except sqlite3.Error as e:
 			ret_text += str(e)
 			print(e)
 			sys.exit(-1)
 		##
-		
+
 		for i in range(0, nr_albums):
 			pb = QPushButton()
-			# im = os.path.join('images', 'AC_DC_Live.jpg')
-			im = album_table[i][4]
+			im = album_table[i][4]  # cover path
+			album_name = album_table[i][2]  # album name
+			artist_name = album_table[i][0]  # artist
+
 			if not os.path.exists(im):
 				print('<E_IMAGE_NOT_FOUND>' + im + ' [maybe you should update the database]')
 				sys.exit(-1) # TODO: do not exit, but use a standard image instead .. or try to extract it from the songs of the album ... or write only the album/artist name on the button ...
+
 			pixmap = QPixmap(im)
 			pixmap = pixmap.scaled(self.COVER_SIZE_ABP, self.COVER_SIZE_ABP)
 			ButtonIcon = QIcon(pixmap)
-			pb.setIconSize(pixmap.rect().size());
+			pb.setIconSize(pixmap.rect().size())
 			pb.setIcon(ButtonIcon)
 			pb.setFixedSize(self.COVER_SIZE_ABP, self.COVER_SIZE_ABP)
+
+			# Add the button to the grid layout
 			grid.addWidget(pb, cur_x, cur_y)
-			# if bDebug:
-				# print('<AlbumPlayerDlg>add widget at (' + str(cur_x) + ', ' + str(cur_y) + ')')
+
+			# Connect the button's clicked signal to a specific function
+			pb.clicked.connect(partial(self.on_album_button_clicked, album_name, artist_name))
+
+			# Update grid coordinates
 			if cur_y > maxCoversInRow:
 				cur_y = 0
 				cur_x += 1
 			else:
 				cur_y += 1
+
 		# Set the content widget as the scroll area's widget
 		scroll.setWidget(content_widget)
 
@@ -739,6 +743,9 @@ class AlbumPlayerDlg(QDialog):
 		layout.addWidget(scroll)
 		self.setLayout(layout)
 		
+	def on_album_button_clicked(self, album_name, artist_name):
+		print(f"Album clicked: {album_name} by {artist_name}")
+
 class TabWindow(QMainWindow):
 	def __init__(self, headers1, data1, headers2, data2):
 		super(TabWindow, self).__init__()
@@ -1019,3 +1026,4 @@ if __name__ == '__main__':
 	window = MainWindow(conf, lConfigs, defaultconfig)
 	window.show()
 	sys.exit(app.exec_())
+
