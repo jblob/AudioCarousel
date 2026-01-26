@@ -572,7 +572,7 @@ class MainWindow(QtWidgets.QDialog):
 		self.textBrowser_testsqlquery.setText(res)
 		
 	def pushButton_albumplayer_playalbum_run(self):
-		self.apd = AlbumPlayerDlg(self.db)
+		self.apd = AlbumPlayerDlg(self.db, self.player, self.playlist)
 		# self.apd.exec_() ### modal dialog
 		self.apd.show() ### non-modal dialog
 		
@@ -670,9 +670,12 @@ class MainWindow(QtWidgets.QDialog):
 					print ('<config created>' + cur_config)
 
 class AlbumPlayerDlg(QDialog):
-	def __init__(self, db):
+	def __init__(self, db, player, playlist):
 		super(AlbumPlayerDlg, self).__init__()
 		self.db = db
+		self.player = player
+		self.playlist = playlist
+		
 		self.setWindowTitle('select album')
 		self.COVER_SIZE_ABP = 150
 		maxCoversInRow = 2
@@ -707,8 +710,8 @@ class AlbumPlayerDlg(QDialog):
 		for i in range(0, nr_albums):
 			pb = QPushButton()
 			im = album_table[i][4]  # cover path
-			album_name = album_table[i][2]  # album name
-			artist_name = album_table[i][0]  # artist
+			album_name = album_table[i][2].replace('/', '_').replace('"','')  # album name
+			artist_name = album_table[i][0].replace('/', '_').replace('"','')  # artist
 			album_path = album_table[i][5] # fullpath
 
 			if not os.path.exists(im):
@@ -750,8 +753,18 @@ class AlbumPlayerDlg(QDialog):
 		# TODO:
 		# create playlist
 		plgen = PlaylistGenerator()
-		plgen.genCompletePlaylistFromDirectory(album_path, artist_name + '_' + album_name + '.m3u', False)
+		playlistfile = artist_name + '_' + album_name + '.m3u'
+		plgen.genCompletePlaylistFromDirectory(album_path, playlistfile, False)
+		
 		# play playlist
+		self.playlist.clear()
+		with open(playlistfile, 'r') as fin:
+			lines = fin.readlines()
+			for line in lines:
+				self.playlist.addMedia(QMediaContent(QUrl.fromLocalFile(line.strip())))
+		
+		self.player.setPlaylist(self.playlist)
+		self.player.play()
 
 class TabWindow(QMainWindow):
 	def __init__(self, headers1, data1, headers2, data2):
