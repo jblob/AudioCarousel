@@ -709,6 +709,7 @@ class AlbumPlayerDlg(QDialog):
 			im = album_table[i][4]  # cover path
 			album_name = album_table[i][2]  # album name
 			artist_name = album_table[i][0]  # artist
+			album_path = album_table[i][5] # fullpath
 
 			if not os.path.exists(im):
 				print('<E_IMAGE_NOT_FOUND>' + im + ' [maybe you should update the database]')
@@ -725,7 +726,7 @@ class AlbumPlayerDlg(QDialog):
 			grid.addWidget(pb, cur_x, cur_y)
 
 			# Connect the button's clicked signal to a specific function
-			pb.clicked.connect(partial(self.on_album_button_clicked, album_name, artist_name))
+			pb.clicked.connect(partial(self.on_album_button_clicked, album_name, artist_name, album_path))
 
 			# Update grid coordinates
 			if cur_y > maxCoversInRow:
@@ -742,8 +743,15 @@ class AlbumPlayerDlg(QDialog):
 		layout.addWidget(scroll)
 		self.setLayout(layout)
 		
-	def on_album_button_clicked(self, album_name, artist_name):
-		print(f"Album clicked: {album_name} by {artist_name}")
+	def on_album_button_clicked(self, album_name, artist_name, album_path):
+		# print(f"Album clicked: {album_name} by {artist_name}")
+		print('<on_album_button_clicked>Now playing album: ' + album_path)
+		
+		# TODO:
+		# create playlist
+		plgen = PlaylistGenerator()
+		plgen.genCompletePlaylistFromDirectory(album_path, artist_name + '_' + album_name + '.m3u', False)
+		# play playlist
 
 class TabWindow(QMainWindow):
 	def __init__(self, headers1, data1, headers2, data2):
@@ -883,6 +891,7 @@ class DB:
 #		sql += str(bIsSampler)  + ', '    #bIsSampler -> later ### how to detect ? special directory ? Artist<->Album Artist ?
 		sql += '"' + coverpath + '", ' #path to coverart
 		sql += '"' + os.path.dirname(data[13]) + '"); ' #fullpath
+		# TODO: path to multi-CDs not possible in this way for AlbumButtonPlayer
 
 		self.exec_sql(sql)
 		
