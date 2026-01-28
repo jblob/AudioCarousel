@@ -1,3 +1,4 @@
+# Standard library imports
 import sys
 import os
 import re
@@ -9,23 +10,28 @@ from subprocess import Popen, PIPE, STDOUT
 from pathlib import Path
 import sqlite3
 
+# PyQt imports
 from PyQt5 import QtWidgets, uic
-from PyQt5.QtWidgets import QAction, QApplication, QLabel, QMainWindow, QMenu, QDialog, QFileDialog, QStatusBar, QPushButton, QGridLayout, QScrollArea, QWidget, QVBoxLayout, QDialogButtonBox, QMessageBox
+from PyQt5.QtWidgets import (
+    QAction, QApplication, QLabel, QMainWindow, QMenu, QDialog, QFileDialog,
+    QStatusBar, QPushButton, QGridLayout, QScrollArea, QWidget, QVBoxLayout,
+    QDialogButtonBox, QMessageBox, QTableView, QTabWidget
+)
 from PyQt5.QtCore import Qt, QUrl
-from PyQt5.QtMultimedia import (QMediaPlayer, QMediaContent, QMediaPlaylist, QMediaMetaData)
+from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent, QMediaPlaylist, QMediaMetaData
 from PyQt5.QtCore import pyqtRemoveInputHook # see comment below
 from PyQt5.QtGui import QPixmap, QIcon
-from PyQt5.QtWidgets import QTableView, QTabWidget
 from PyQt5.QtCore import QAbstractTableModel
 
+# Third-party library imports
 import mutagen
 from mutagen.mp3 import MP3, MPEGInfo
 from mutagen.mp4 import MP4
 from mutagen.id3 import ID3, APIC
 from mutagen.easyid3 import EasyID3
 
+# Local imports
 from functools import partial
-
 # from typing import NamedTuple
 
 bDebug = True
