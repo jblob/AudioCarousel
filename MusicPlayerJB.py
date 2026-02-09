@@ -334,9 +334,7 @@ class MainWindow(QtWidgets.QDialog):
 		self.player = QMediaPlayer()
 		self.playlist = QMediaPlaylist()
 		pyqtRemoveInputHook() # otherwise no debugging with pdb possible :/
-		self.randomplaylistgen = self.randomplaylist
-		# self.randomplaylistgen = 'playlist_random_gen.m3u' #TODO: these 2 should be the same file - only use different ones for testing
-		self.randomplayliststate = self.getPlaylistSavedState(self.randomplaylistgen)
+		self.randomplayliststate = self.getPlaylistSavedState(self.randomplaylist)
 		self.label_cover.setStyleSheet('background-color: white;')
 
 		# connect signals and slots
@@ -420,8 +418,10 @@ class MainWindow(QtWidgets.QDialog):
 
 	def pushButton_genrandomplaylist_run(self):
 		plgen = PlaylistGenerator()
-		d = QFileDialog.getExistingDirectory(self, 'select Music Directory', '.', QFileDialog.Option.ShowDirsOnly)
-		plgen.genCompletePlaylistFromDirectory(d, self.randomplaylistgen, True)
+		### old implementation with dialog -> now changed to read from config
+		# d = QFileDialog.getExistingDirectory(self, 'select Music Directory', '.', QFileDialog.Option.ShowDirsOnly)
+		# plgen.genCompletePlaylistFromDirectory(d, self.randomplaylist, True)
+		plgen.genCompletePlaylistFromDirectory(self.sounddir, self.randomplaylist, True)
 		self.playlist.setCurrentIndex(0)
 		self.bPlaylistNeedsSaving = True
 		
