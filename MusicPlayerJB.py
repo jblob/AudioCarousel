@@ -87,6 +87,8 @@ class MP3Data:
 		self.rating = 0
 		self.fullpath = ''
 		self.imagedirectory = 'images'
+		if not os.path.exists(self.imagedirectory):
+			os.makedirs(self.imagedirectory)
 
 	def data(self, player):
 		# this is only usable while playing, otherwise no QMediaMetaData is available :/
@@ -122,64 +124,27 @@ class MP3Data:
 			self.mpgType = 'mp3'
 		elif file.endswith('mp4'):
 			self.mpgType = 'mp4'
-		if self.mpgType == 'mp3':
-			audio = MP3(file, ID3=EasyID3)
-			tags  = ID3(file)
-			try:
-				self.title = audio['title'][0]
-			except:
-				pass
-			try:
-				self.artist = audio['artist'][0].replace('"','')
-			except:
-				pass
-			try:
-				self.albumartist = audio['albumartist'][0].replace('"','')
-			except:
-				pass
-			try:
-				self.album = audio['album'][0].replace('"','')
-				# print('<DBG>' + self.album)
-			except:
-				pass
-			try:
-				self.genre = audio['genre'][0].replace('"','')
-			except:
-				pass
-			try:
-				self.duration = audio.info.length
-			except:
-				pass
+		
+		self.fullpath = file
 
-			if 'APIC:Cover' in tags:
-				self.bCoverAvailable = True
-			else:
-				self.bCoverAvailable = False
+		if self.mpgType == 'mp3':
 			try:
-				self.tracknumber = audio['tracknumber'][0]
-			except:
-				pass
-			try:
-				self.year = audio['date'][0]
-			except:
-				pass
-			try:
+				audio = MP3(file, ID3=EasyID3)
+				tags = ID3(file)
+				self.title = audio.get('title', [''])[0]
+				self.artist = audio.get('artist', [''])[0].replace('"', '')
+				self.albumartist = audio.get('albumartist', [''])[0].replace('"', '')
+				self.album = audio.get('album', [''])[0].replace('"', '')
+				self.genre = audio.get('genre', [''])[0].replace('"', '')
+				self.duration = audio.info.length
+				self.bCoverAvailable = any(k.startswith('APIC') for k in tags.keys())
+				self.tracknumber = audio.get('tracknumber', [''])[0]
+				self.year = audio.get('date', [''])[0]
 				self.channels = audio.info.channels
-			except:
-				pass
-			try:
-				self.bitrate_mode = audio.info.bitrate_mode
-			except:
-				pass
-			try:
+				self.bitrate_mode = str(audio.info.bitrate_mode)
 				self.bitrate = audio.info.bitrate
-			except:
-				pass
-			try:
-				self.rating = audio.info.rating
-			except:
-				pass
-			self.fullpath = file
+			except Exception as e:
+				if bDebug: print(f"Error reading MP3 tags: {e}")
 	###
 			# print("ID3 tags included in this song ------------------")
 			# print(tags.pprint())
@@ -200,51 +165,23 @@ class MP3Data:
 			# else:
 				# print('<APIC:Cover>n/a')
 		elif self.mpgType == 'mp4':
-			# try:
-			mp4 = MP4(file)
 			try:
-				# self.title = mp4.get('title')[0]
-				self.title = mp4.tags['\xa9nam'][0]
-			except:
-				pass
-			try:
-				# self.artist = mp4.get('artist')[0]
-				self.artist = mp4.tags['\xa9ART'][0]
-				# self.artist = mp4.tags['aART'][0] ### alternative: album artist -> use in Sampler ?
-			except:
-				pass
-			try:
-				# self.album = mp4.get('album')[0]
-				self.album = mp4.tags['\xa9alb'][0]
-			except:
-				pass
-			try:
-				# self.genre = mp4.get('genre')[0]
-				self.genre = mp4.tags['\xa9gen'][0]
-			except:
-				pass
-			try:
+				mp4 = MP4(file)
+				self.title = mp4.tags.get('\xa9nam', [''])[0] if mp4.tags else ''
+				self.artist = mp4.tags.get('\xa9ART', [''])[0].replace('"', '') if mp4.tags else ''
+				self.albumartist = mp4.tags.get('aART', [''])[0].replace('"', '') if mp4.tags else ''
+				self.album = mp4.tags.get('\xa9alb', [''])[0].replace('"', '') if mp4.tags else ''
+				self.genre = mp4.tags.get('\xa9gen', [''])[0].replace('"', '') if mp4.tags else ''
 				self.duration = mp4.info.length
-			except:
-				pass
-			self.bCoverAvailable = False
-			self.tracknumber = 0
-			try:
-				# self.year = mp4.get('year')[0]
-				self.year = mp4.tags['\xa9day'][0]
-			except:
-				pass
-			try:
+				self.bCoverAvailable = False
+				self.tracknumber = 0
+				self.year = mp4.tags.get('\xa9day', [''])[0] if mp4.tags else ''
 				self.channels = mp4.info.channels
-			except:
-				pass
-			self.bitrate_mode  = 'BitrateMode.UNKNOWN' ### TODO
-			try:
+				self.bitrate_mode = 'BitrateMode.UNKNOWN'
 				self.bitrate = mp4.info.bitrate
-			except:
-				pass
+			except Exception as e:
+				if bDebug: print(f"Error reading MP4 tags: {e}")
 			self.rating = 0 ### TODO
-			self.fullpath = file
 
 			# metadata = \
 			# {
@@ -271,10 +208,8 @@ class MP3Data:
 			audio = MP3(file, ID3=ID3)
 			audio2 = MP3(file, ID3=EasyID3)
 			tags  = ID3(file)
-			artist_ = audio2['artist'][0]
-			artist = artist_.replace('/', '_').replace('"','')
-			album_ = audio2['album'][0]
-			album = album_.replace('/', '_').replace('"','')
+			artist = audio2.get('artist', ['Unknown'])[0].replace('/', '_').replace('"', '')
+			album = audio2.get('album', ['Unknown'])[0].replace('/', '_').replace('"', '')
 			img_name =  os.path.join(self.imagedirectory, artist + '_' + album + '.jpg')
 			if bDebug:
 				print('<IMGNAME>' + img_name)
@@ -314,12 +249,41 @@ class MP3Data:
 		print('</MP3DATA>')
 		print('---------------------------------------------------')
 		
+class TableModel(QAbstractTableModel):
+	def __init__(self, data, headers):
+		super().__init__()
+		self._data = data
+		self._headers = headers  # Column headers
+		
+	def data(self, index, role):
+		if role == Qt.DisplayRole:
+			# See below for the nested-list data structure.
+			# .row() indexes into the outer list,
+			# .column() indexes into the sub-list
+			return self._data[index.row()][index.column()]
+
+	def rowCount(self, index):
+		# The length of the outer list.
+		return len(self._data)
+
+	def columnCount(self, index):
+		# The following takes the first sub-list, and returns
+		# the length (only works if all rows are an equal length)
+		return len(self._headers)  # Number of columns
+
+	def headerData(self, section, orientation, role=Qt.DisplayRole):
+		if role == Qt.DisplayRole:
+			if orientation == Qt.Horizontal:  # Column headers
+				return self._headers[section]
+			elif orientation == Qt.Vertical:  # Row numbers
+				return str(section + 1)
+
 class MainWindow(QtWidgets.QDialog):
 	def __init__(self, configs, lConfigs, startconfig):
 		super(MainWindow, self).__init__()
 		self.COVER_SIZE = 150
 		uic.loadUi('MusicPlayerJB.ui', self)
-		self.setFixedSize(1400,810)
+#?		self.setFixedSize(1400,810)
 		self.label_cover.setFixedSize(self.COVER_SIZE, self.COVER_SIZE)
 		
 		self.configs = configs
@@ -329,12 +293,15 @@ class MainWindow(QtWidgets.QDialog):
 		self.db             = DB(self.configs.dCfgDbname[startconfig])
 		self.randomplaylist = self.configs.dCfgRandomplaylist[startconfig]
 		self.sounddir       = self.configs.dCfgSounddir[startconfig]
+		
+		self.player_mode = self.buttonGroup.checkedButton().text() ### 'AlbumPlayer' # TODO: read this from config ?
+		self.bAlbumSelected = False
+		self.bPlaylistChanged = False
 
-		self.bPlaylistNeedsSaving = False
 		self.player = QMediaPlayer()
 		self.playlist = QMediaPlaylist()
 		pyqtRemoveInputHook() # otherwise no debugging with pdb possible :/
-		self.randomplayliststate = self.getPlaylistSavedState(self.randomplaylist)
+#		self.randomplayliststate = self.getPlaylistSavedState(self.randomplaylist)
 		self.label_cover.setStyleSheet('background-color: white;')
 
 		# connect signals and slots
@@ -352,11 +319,12 @@ class MainWindow(QtWidgets.QDialog):
 		self.pushButton_config_newconfig.clicked.connect(self.pushButton_config_newconfig_run)
 		self.pushButton_config_deleteconfig.clicked.connect(self.pushButton_config_deleteconfig_run)
 		self.pushButton_config_setasdefault.clicked.connect(self.pushButton_config_setasdefault_run)
+		self.buttonGroup.buttonToggled.connect(self.slot_modechanged)
 
 		self.player.metaDataChanged.connect(self.slotMetaDataChanged)
 		self.playlist.currentIndexChanged.connect(self.slotIndexChanged)
 		
-		### test
+		### TODO: this is in test only
 		# self.player.setMedia(QMediaContent(QUrl.fromLocalFile('e:/000_2024/at_Urlaub/dSPACE_LearningConnectionRecording_MBD_1280x720_20210211-2_EN.mp4')))
 		self.player.setMedia(QMediaContent(QUrl.fromLocalFile('e:/at_home/3/Sound/_videos_unsorted/t_online_werbung.mp4')))
 		self.player.setVideoOutput(self.widget_videooutput)
@@ -377,6 +345,12 @@ class MainWindow(QtWidgets.QDialog):
 		self.comboBox_selectconfig.addItems(lConfigs)
 		self.comboBox_selectconfig.setCurrentText(startconfig)
 		
+	def slot_modechanged(self, obj, checked):
+		self.player_mode = obj.text()
+		# if bDebug:
+			# print('<slot_modechanged>setting player mode to ' + self.player_mode)
+		# pass
+		
 	def updateListViews(self):
 		# fill listviews from DB
 		self.comboBox_genre.clear()
@@ -389,29 +363,74 @@ class MainWindow(QtWidgets.QDialog):
 		self.comboBox_artist.addItems(self.allartists)
 
 	def pushButton_randomplaylist_play_run(self):
+		# if self.player.state() == QMediaPlayer.PlayingState:
+		# elif self.player.state() == QMediaPlayer.StoppedState:
+		if self.player_mode == 'RandomPlayer':
+			if self.player.state() == QMediaPlayer.PlayingState:
+				print('already playing')
+			elif self.player.state() == QMediaPlayer.StoppedState:
+				# self.url = QUrl
+
+				# load playlist
+				self.playlist.clear()
+				self.playlist = Utils.load_playlist_from_file(self.randomplaylist)
+				
+				if self.bPlaylistChanged:
+					self.playlist.setCurrentIndex(0)
+					self.bPlaylistChanged = False
+				else:
+					saved_idx = self.getPlaylistSavedState(self.randomplaylist)
+					if saved_idx >= self.playlist.mediaCount() or saved_idx < 0:
+						saved_idx = 0
+					self.playlist.setCurrentIndex(saved_idx)
+
+				# update list widget # TODO: put this in an own function
+				self.listWidget_randomplaylist.clear()
+				if os.path.exists(self.randomplaylist):
+					with open(self.randomplaylist, 'r') as fin:
+						for line in fin:
+							if line.strip():
+								self.listWidget_randomplaylist.addItem(line.strip())
+
+				self.player.setPlaylist(self.playlist)
+				self.player.setVolume(50)
+				self.player.play()
+			elif self.player.state() == QMediaPlayer.PausedState:
+				self.player.play()
+		elif self.player_mode == 'AlbumPlayer':
+			if not self.bAlbumSelected:
+				self.pushButton_albumplayer_playalbum_run()
+			elif self.player.state() != QMediaPlayer.PlayingState:
+				# self.player.setVolume(50)
+				self.player.play()
+
+	def pushButton_randomplaylist_play_2_run(self):
 		if self.player.state() == QMediaPlayer.PlayingState:
-			if bDebug:
-				print(str(self.player.state()))
-			print('already playing')
+			if self.player_mode == 'AlbumPlayer':
+				self.player.stop()
+				self.load_playlist_from_file(self.randomplaylist, self.playlist)
+				# play playlist
+				self.player.setPlaylist(self.playlist)
+				self.player.play()
+				# self.player_mode = 'RandomPlayer'
+			elif self.player_mode == 'RandomPlayer':
+				print('already playing')
 		elif self.player.state() == QMediaPlayer.StoppedState:
-			if bDebug:
-				print(str(self.player.state()))
 			self.url = QUrl
+			self.listWidget_randomplaylist.clear()
+
+			# load playlist
+			self.load_playlist_from_file(self.randomplaylist, self.playlist)
 			with open(self.randomplaylist, 'r') as fin:
 				lines = fin.readlines()
 				fin.close()
-			
-			self.listWidget_randomplaylist.clear()
-			self.playlist.clear()
-			for _line in lines:
-				line = os.path.join(os.getcwd(), _line.strip())
-				self.playlist.addMedia(QMediaContent(self.url.fromLocalFile(line)))
-				self.listWidget_randomplaylist.addItem(line)
+				for _line in lines:
+					line = os.path.join(os.getcwd(), _line.strip())
+					self.listWidget_randomplaylist.addItem(line)
 
 			self.playlist.setCurrentIndex(self.randomplayliststate)
 			self.player.setPlaylist(self.playlist)
 			self.player.setVolume(50)
-			self.bPlaylistNeedsSaving = True
 			self.player.play()
 		elif self.player.state() == QMediaPlayer.PausedState:
 			self.player.play()
@@ -423,17 +442,12 @@ class MainWindow(QtWidgets.QDialog):
 		# plgen.genCompletePlaylistFromDirectory(d, self.randomplaylist, True)
 		plgen.genCompletePlaylistFromDirectory(self.sounddir, self.randomplaylist, True)
 		self.playlist.setCurrentIndex(0)
-		self.bPlaylistNeedsSaving = True
+		self.savePlaylistState(self.playlist, self.randomplaylist)
+		self.bPlaylistChanged = True
 		
 	def pushButton_randomplaylist_stop_run(self):
-		if self.player.state() == QMediaPlayer.PlayingState:
-			self.player.stop()
-		elif self.player.state() == QMediaPlayer.StoppedState:
-			print('not playing')
-		elif self.player.state() == QMediaPlayer.PausedState:
-			self.player.stop()
-		if self.bPlaylistNeedsSaving:
-			self.savePlaylistState(self.playlist, self.randomplaylist)
+		self.player.stop()
+		self.savePlaylistState(self.playlist, self.randomplaylist)
 		
 	def pushButton_randomplaylist_pause_run(self):
 		if self.player.state() == QMediaPlayer.PlayingState:
@@ -449,6 +463,7 @@ class MainWindow(QtWidgets.QDialog):
 			self.playlist.setCurrentIndex(self.playlist.mediaCount()-1)
 		else:
 			self.playlist.previous()
+		self.savePlaylistState(self.playlist, self.randomplaylist)
 		  
 	def pushButton_randomplaylist_next_run(self):
 		# method for moving to next track
@@ -456,6 +471,7 @@ class MainWindow(QtWidgets.QDialog):
 		if self.playlist.currentIndex() == -1:
 			self.playlist.setCurrentIndex(0)
 			self.player.play()
+		self.savePlaylistState(self.playlist, self.randomplaylist)
 
 	def savePlaylistState(self, playlist, playlistfile):
 		idx = playlist.currentIndex()
@@ -464,11 +480,10 @@ class MainWindow(QtWidgets.QDialog):
 		f = open(playlistfile + '.index.txt', 'w')
 		f.write(str(idx))
 		f.close()
-		self.bPlaylistNeedsSaving = False
 
 	def getPlaylistSavedState(self, playlist):
 		if playlist == '':
-			return
+			return 0
 		filename = playlist + '.index.txt'
 		if os.path.exists(filename):
 			f = open(filename, 'r')
@@ -483,7 +498,7 @@ class MainWindow(QtWidgets.QDialog):
 
 	def slotMetaDataChanged(self):
 		if self.player.isMetaDataAvailable():
-			data = self.player.metaData(QMediaMetaData.Title)
+			# data = self.player.metaData(QMediaMetaData.Title)
 			mp3data = MP3Data().data(self.player)
 			if bDebug:
 				print('<slotMetaDataChanged>' + str(mp3data))
@@ -493,9 +508,12 @@ class MainWindow(QtWidgets.QDialog):
 			self.label_genre_2.setText(str(mp3data['genre'])) # genre is a list, TODO: better handling to display it ? genre[0] ?
 			self.label_year_2.setText(str(mp3data['release']))
 
-			pixmap = QPixmap(mp3data['coverart_th'])
-			pixmap = pixmap.scaled(self.COVER_SIZE, self.COVER_SIZE)
-			self.label_cover.setPixmap(pixmap)
+			if mp3data['coverart_th'] and mp3data['coverart_th'] != 'Unknown':
+				pixmap = QPixmap(mp3data['coverart_th'])
+				pixmap = pixmap.scaled(self.COVER_SIZE, self.COVER_SIZE)
+				self.label_cover.setPixmap(pixmap)
+			else:
+				self.label_cover.clear() ### TODO: standard pixmap
 			self.statusBar.showMessage('playing: ' + mp3data['track'] + ' - ' + mp3data['artist'])
 		else:
 			self.label_artist_2.setText('<unknown>')
@@ -505,29 +523,22 @@ class MainWindow(QtWidgets.QDialog):
 			self.label_year_2.setText('<unknown>')
 
 			# self.label_cover.setPixmap(pixmap) ### TODO: standard pixmap
+		self.savePlaylistState(self.playlist, self.randomplaylist)
 			
 	def slotIndexChanged(self):
-		self.listWidget_randomplaylist.setCurrentRow(self.playlist.currentIndex())
-		if bDebug:
-			print('<setCurrentRow><slotIndexChanged>' + str(self.listWidget_randomplaylist.currentRow() + 1))
-		if self.playlist.currentIndex() < 0:
-			self.window.music_list.setCurrentRow(0)
-			self.playlist.setCurrentIndex(0)
+		idx = self.playlist.currentIndex()
+		if idx >= 0:
+			self.listWidget_randomplaylist.setCurrentRow(idx)
+			self.savePlaylistState(self.playlist, self.randomplaylist)
 
 	def closeEvent(self, event):
-		if self.bPlaylistNeedsSaving:
-			self.savePlaylistState(self.playlist, self.randomplaylist)
-		if bDebug:
-			print('Exiting ...')
-		self.db.conn.close()
+		self.savePlaylistState(self.playlist, self.randomplaylist)
+		self.db.close()
 	
 	def pushButton_database_updateDB_run(self):
 		# Thread filling the DB
-#		sounddir = QFileDialog.getExistingDirectory(self, '📁 select Music Directory', '.', QFileDialog.Option.ShowDirsOnly)
-		lAllAbums = []
-		# files = glob.glob(self.sounddir + '/**/*.mp4', recursive=True)
+		lAllAlbums = []
 		files = glob.glob(self.sounddir + '/**/*.mp?', recursive=True) ### mp4 not supported by mutagen :( -> TODO: search for another lib
-		# files = list(Path(self.sounddir).rglob("*.[mM][pP][34]"))
 		nFilesToProceed = len(files) # for progress bar
 		self.db.createTables()
 		if bDebug:
@@ -538,18 +549,9 @@ class MainWindow(QtWidgets.QDialog):
 				print('\tprocessing: ' + curfile)
 			m = MP3Data()
 			arrMp3Data = m.getTagsFromFile(curfile)
-			# arrMp3DataNew = []
-			# for s in arrMp3Data:
-				# if isinstance(s, str):
-					# newval = s.replace('"','\'')
-				# else:
-					# newval = s
-				# arrMp3DataNew.append(newval)
-			# if bDebug:
-				# m.printData(curfile)
 			self.db.addline_tablesongs(arrMp3Data)
-			if not arrMp3Data[2] in lAllAbums:
-				lAllAbums.append(arrMp3Data[2])
+			if not arrMp3Data[2] in lAllAlbums:
+				lAllAlbums.append(arrMp3Data[2])
 				if bRegenerateAlbumImages:
 					imagename = m.getImage(curfile)
 				self.db.addline_tablealbums(arrMp3Data, imagename)
@@ -578,9 +580,10 @@ class MainWindow(QtWidgets.QDialog):
 		self.textBrowser_testsqlquery.setText(res)
 		
 	def pushButton_albumplayer_playalbum_run(self):
-		self.apd = AlbumPlayerDlg(self.db, self.player, self.playlist)
+		self.apd = AlbumPlayerDlg(self)  # Pass MainWindow instance
 		# self.apd.exec_() ### modal dialog
 		self.apd.show() ### non-modal dialog
+		self.bAlbumSelected = True
 		
 	# def comboBox_selectconfig_cfgchanged_i(self, value):
 		# if bDebug:
@@ -617,7 +620,7 @@ class MainWindow(QtWidgets.QDialog):
 		self.dlg.exec_()
 		
 	def pushButton_config_deleteconfig_run(self):
-		if len(lConfigs) < 2:
+		if len(self.lConfigs) < 2:
 			msg = QMessageBox()
 			msg.setIcon(QMessageBox.Icon.Warning)
 			msg.setText('Cannot delete Config since no other config is available')
@@ -648,6 +651,7 @@ class MainWindow(QtWidgets.QDialog):
 			self.configs.dCfgSounddir[self.curConfig] = self.dlg.lineEdit_sounddir.text()
 			self.configs.dCfgRandomplaylist[self.curConfig] = self.dlg.lineEdit_randomplaylist.text()
 			self.configs.saveConfigfile()
+			#self.comboBox_selectconfig_cfgchanged_t(0)
 
 	def buttonBox_okcancel2_run(self, button):
 		role = self.dlg.buttonBox_okcancel.standardButton(button)
@@ -676,13 +680,11 @@ class MainWindow(QtWidgets.QDialog):
 					print ('<config created>' + cur_config)
 
 class AlbumPlayerDlg(QDialog):
-	def __init__(self, db, player, playlist):
+	def __init__(self, main_window):
 		super(AlbumPlayerDlg, self).__init__()
-		self.db = db
-		self.player = player
-		self.playlist = playlist
+		self.main_window = main_window  # Reference to MainWindow
 		
-		self.setWindowTitle('select album')
+		self.setWindowTitle('Select Album')
 		self.COVER_SIZE_ABP = 150
 		maxCoversInRow = 2
 
@@ -699,7 +701,7 @@ class AlbumPlayerDlg(QDialog):
 		d_imagpaths = {}
 		cmd = 'select * from ALBUMS'
 		try:
-			conn = sqlite3.connect(self.db.dbname)
+			conn = sqlite3.connect(self.main_window.db.dbname)
 			self.cursor = conn.cursor()
 			print('<SQL>' + cmd)
 			self.cursor.execute(cmd)
@@ -761,16 +763,19 @@ class AlbumPlayerDlg(QDialog):
 		plgen = PlaylistGenerator()
 		playlistfile = artist_name + '_' + album_name + '.m3u'
 		plgen.genCompletePlaylistFromDirectory(album_path, playlistfile, False)
-		
-		# play playlist
-		self.playlist.clear()
-		with open(playlistfile, 'r') as fin:
-			lines = fin.readlines()
-			for line in lines:
-				self.playlist.addMedia(QMediaContent(QUrl.fromLocalFile(line.strip())))
-		
-		self.player.setPlaylist(self.playlist)
-		self.player.play()
+
+		# Set the playlist in MainWindow
+		self.main_window.playlist = Utils.load_playlist_from_file(playlistfile)
+		self.main_window.player.setPlaylist(self.main_window.playlist)
+		self.main_window.player.play()
+
+	# def load_playlist_from_file(self, playlistfile, playlist):
+		# playlist.clear()
+		# with open(playlistfile, 'r') as fin:
+			# lines = fin.readlines()
+			# fin.close()
+			# for line in lines:
+				# playlist.addMedia(QMediaContent(QUrl.fromLocalFile(line.strip())))
 
 class TabWindow(QMainWindow):
 	def __init__(self, headers1, data1, headers2, data2):
@@ -948,35 +953,6 @@ class DB:
 			
 		return retval
 		
-class TableModel(QAbstractTableModel):
-	def __init__(self, data, headers):
-		super().__init__()
-		self._data = data
-		self._headers = headers  # Column headers
-		
-	def data(self, index, role):
-		if role == Qt.DisplayRole:
-			# See below for the nested-list data structure.
-			# .row() indexes into the outer list,
-			# .column() indexes into the sub-list
-			return self._data[index.row()][index.column()]
-
-	def rowCount(self, index):
-		# The length of the outer list.
-		return len(self._data)
-
-	def columnCount(self, index):
-		# The following takes the first sub-list, and returns
-		# the length (only works if all rows are an equal length)
-		return len(self._headers)  # Number of columns
-
-	def headerData(self, section, orientation, role=Qt.DisplayRole):
-		if role == Qt.DisplayRole:
-			if orientation == Qt.Horizontal:  # Column headers
-				return self._headers[section]
-			elif orientation == Qt.Vertical:  # Row numbers
-				return str(section + 1)
-
 class Config:
 	def __init__(self):
 		# default values for test
@@ -1046,6 +1022,24 @@ class Config:
 		fout.write(text)
 		fout.close()
 
+class Utils:
+	def __init__(self):
+		pass
+
+	##############################################################################
+	# helper function
+	##############################################################################
+	@staticmethod
+	def load_playlist_from_file(playlistfile):
+		playlist = QMediaPlaylist()
+		# playlist.clear()
+		with open(playlistfile, 'r') as fin:
+			lines = fin.readlines()
+			fin.close()
+			for line in lines:
+				playlist.addMedia(QMediaContent(QUrl.fromLocalFile(line.strip())))
+		return playlist
+
 if __name__ == '__main__':
 	app = QtWidgets.QApplication(sys.argv)
 	conf = Config()
@@ -1054,3 +1048,4 @@ if __name__ == '__main__':
 	window.show()
 	sys.exit(app.exec_())
 
+### use a global QMediaPlayer and QMediaPlaylist for MainWindow and AlbumPlayerDlg ?
