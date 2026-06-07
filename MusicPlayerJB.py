@@ -79,7 +79,7 @@ class MP3Data:
 		self.genre = ''
 		self.duration = 0
 		self.bCoverAvailable = False
-		self.tracknumber = ''
+		self.tracknumber = 0
 		self.year = 0
 		self.channels = 0
 		self.bitrate_mode = ''
@@ -131,20 +131,21 @@ class MP3Data:
 			try:
 				audio = MP3(file, ID3=EasyID3)
 				tags = ID3(file)
-				self.title = audio.get('title', [''])[0]
-				self.artist = audio.get('artist', [''])[0].replace('"', '')
-				self.albumartist = audio.get('albumartist', [''])[0].replace('"', '')
-				self.album = audio.get('album', [''])[0].replace('"', '')
-				self.genre = audio.get('genre', [''])[0].replace('"', '')
+				self.title = audio.get('title', ['-'])[0].replace('"', '')
+				self.artist = audio.get('artist', ['-'])[0].replace('"', '')
+				self.albumartist = audio.get('albumartist', ['-'])[0].replace('"', '')
+				self.album = audio.get('album', ['-'])[0].replace('"', '')
+				self.genre = audio.get('genre', ['-'])[0].replace('"', '')
 				self.duration = audio.info.length
 				self.bCoverAvailable = any(k.startswith('APIC') for k in tags.keys())
-				self.tracknumber = audio.get('tracknumber', [''])[0]
-				self.year = audio.get('date', [''])[0]
+				self.tracknumber = audio.get('tracknumber', [0])[0]
+				self.year = audio.get('date', ['0'])[0]
 				self.channels = audio.info.channels
 				self.bitrate_mode = str(audio.info.bitrate_mode)
 				self.bitrate = audio.info.bitrate
 			except Exception as e:
-				if bDebug: print(f"Error reading MP3 tags: {e}")
+				if bDebug: 
+					print(f"Error reading MP3 tags: {e}")
 	###
 			# print("ID3 tags included in this song ------------------")
 			# print(tags.pprint())
@@ -167,15 +168,15 @@ class MP3Data:
 		elif self.mpgType == 'mp4':
 			try:
 				mp4 = MP4(file)
-				self.title = mp4.tags.get('\xa9nam', [''])[0] if mp4.tags else ''
-				self.artist = mp4.tags.get('\xa9ART', [''])[0].replace('"', '') if mp4.tags else ''
-				self.albumartist = mp4.tags.get('aART', [''])[0].replace('"', '') if mp4.tags else ''
-				self.album = mp4.tags.get('\xa9alb', [''])[0].replace('"', '') if mp4.tags else ''
-				self.genre = mp4.tags.get('\xa9gen', [''])[0].replace('"', '') if mp4.tags else ''
+				self.title = mp4.tags.get('\xa9nam', [' '])[0] if mp4.tags else ' '
+				self.artist = mp4.tags.get('\xa9ART', [' '])[0].replace('"', '') if mp4.tags else ' '
+				self.albumartist = mp4.tags.get('aART', [' '])[0].replace('"', '') if mp4.tags else ' '
+				self.album = mp4.tags.get('\xa9alb', [' '])[0].replace('"', '') if mp4.tags else ' '
+				self.genre = mp4.tags.get('\xa9gen', [' '])[0].replace('"', '') if mp4.tags else ' '
 				self.duration = mp4.info.length
 				self.bCoverAvailable = False
 				self.tracknumber = 0
-				self.year = mp4.tags.get('\xa9day', [''])[0] if mp4.tags else ''
+				self.year = mp4.tags.get('\xa9day', ['0'])[0] if mp4.tags else '0'
 				self.channels = mp4.info.channels
 				self.bitrate_mode = 'BitrateMode.UNKNOWN'
 				self.bitrate = mp4.info.bitrate
@@ -210,7 +211,7 @@ class MP3Data:
 			tags  = ID3(file)
 			artist = audio2.get('artist', ['Unknown'])[0].replace('/', '_').replace('"', '')
 			album = audio2.get('album', ['Unknown'])[0].replace('/', '_').replace('"', '')
-			img_name =  os.path.join(self.imagedirectory, artist + '_' + album + '.jpg')
+			img_name =  os.path.join(self.imagedirectory, artist + '_' + album + '.jpg').replace('?','_').replace(':','_').replace(' ','')
 			if bDebug:
 				print('<IMGNAME>' + img_name)
 			# Check if the MP3 file contains an embedded image
@@ -221,10 +222,10 @@ class MP3Data:
 						image_data = tag.data
 						# Save the image to a file - "artist_album.jpg"
 						###img_name = audio['artist'][0] + '_' + audio['album'][0]
-						with open(img_name, 'wb') as img_file:
-							img_file.write(image_data)
 						if bDebug:
 							print('<Embedded_image>' + img_name)
+						with open(img_name, 'wb') as img_file:
+							img_file.write(image_data)
 						# break
 		return img_name
 	
@@ -326,8 +327,8 @@ class MainWindow(QtWidgets.QDialog):
 		
 		### TODO: this is in test only
 		# self.player.setMedia(QMediaContent(QUrl.fromLocalFile('e:/000_2024/at_Urlaub/dSPACE_LearningConnectionRecording_MBD_1280x720_20210211-2_EN.mp4')))
-		self.player.setMedia(QMediaContent(QUrl.fromLocalFile('e:/at_home/3/Sound/_videos_unsorted/t_online_werbung.mp4')))
-		self.player.setVideoOutput(self.widget_videooutput)
+#		self.player.setMedia(QMediaContent(QUrl.fromLocalFile('e:/at_home/3/Sound/_videos_unsorted/t_online_werbung.mp4')))
+#		self.player.setVideoOutput(self.widget_videooutput)
 		# connect(mplayer, &QMediaPlayer::stateChanged, [vw](QMediaPlayer::State state){
 							# if (state == QMediaPlayer::StoppedState)
 								# vw->update(); });
@@ -371,30 +372,34 @@ class MainWindow(QtWidgets.QDialog):
 			elif self.player.state() == QMediaPlayer.StoppedState:
 				# self.url = QUrl
 
-				# load playlist
-				self.playlist.clear()
-				self.playlist = Utils.load_playlist_from_file(self.randomplaylist)
+				# load playlist only when it is empty or has been regenerated
+				if self.playlist.mediaCount() == 0 or self.bPlaylistChanged:
+					self.playlist.clear()
+					self.playlist = Utils.load_playlist_from_file(self.randomplaylist)
+					
+					self.listWidget_randomplaylist.clear()
+					if os.path.exists(self.randomplaylist):
+						with open(self.randomplaylist, 'r') as fin:
+							for line in fin:
+								if line.strip():
+									self.listWidget_randomplaylist.addItem(line.strip())
 				
-				if self.bPlaylistChanged:
-					self.playlist.setCurrentIndex(0)
-					self.bPlaylistChanged = False
-				else:
-					saved_idx = self.getPlaylistSavedState(self.randomplaylist)
-					if saved_idx >= self.playlist.mediaCount() or saved_idx < 0:
-						saved_idx = 0
-					self.playlist.setCurrentIndex(saved_idx)
+				# WICHTIG f. Neustart: Zuerst die Playlist an den Player binden...
+				if self.player.playlist() != self.playlist:
+					self.player.setPlaylist(self.playlist)
 
-				# update list widget # TODO: put this in an own function
-				self.listWidget_randomplaylist.clear()
-				if os.path.exists(self.randomplaylist):
-					with open(self.randomplaylist, 'r') as fin:
-						for line in fin:
-							if line.strip():
-								self.listWidget_randomplaylist.addItem(line.strip())
-
-				self.player.setPlaylist(self.playlist)
+				# Index aus dem gespeicherten Zustand holen
+				saved_idx = self.getPlaylistSavedState(self.randomplaylist)
+				# Absicherung gegen -1 oder Out-of-Bounds
+				if saved_idx >= self.playlist.mediaCount() or saved_idx < 0:
+					saved_idx = 0
+				
+				# Erst der Playlist den Index zuweisen...
+				self.playlist.setCurrentIndex(saved_idx)
+					
 				self.player.setVolume(50)
 				self.player.play()
+				self.bPlaylistChanged = False
 			elif self.player.state() == QMediaPlayer.PausedState:
 				self.player.play()
 		elif self.player_mode == 'AlbumPlayer':
@@ -474,12 +479,20 @@ class MainWindow(QtWidgets.QDialog):
 		self.savePlaylistState(self.playlist, self.randomplaylist)
 
 	def savePlaylistState(self, playlist, playlistfile):
+		if playlistfile == '': 
+			return
 		idx = playlist.currentIndex()
-		if bDebug:
-			print('<savePlaylistState>' + playlistfile + '<idx>' + str(idx))
-		f = open(playlistfile + '.index.txt', 'w')
-		f.write(str(idx))
-		f.close()
+		# save only when idx valid (>=0)
+		# this avoids overwriting the index in the STOPPED state
+		if idx >= 0:
+			if bDebug: 
+				print('<I><savePlaylistState>' + playlistfile + '<idx>' + str(idx))
+			try:
+				f = open(playlistfile + '.index.txt', 'w')
+				f.write(str(idx))
+				f.close()
+			except Exception as e:
+				print('<E><savePlaylistState>Error saving playlist state: ' + e)
 
 	def getPlaylistSavedState(self, playlist):
 		if playlist == '':
@@ -533,7 +546,7 @@ class MainWindow(QtWidgets.QDialog):
 
 	def closeEvent(self, event):
 		self.savePlaylistState(self.playlist, self.randomplaylist)
-		self.db.close()
+		self.db.conn.close()
 	
 	def pushButton_database_updateDB_run(self):
 		# Thread filling the DB
@@ -547,6 +560,8 @@ class MainWindow(QtWidgets.QDialog):
 		for curfile in files:
 			if bDebug:
 				print('\tprocessing: ' + curfile)
+				if curfile.startswith('/home/blju/Sound/Clash/Videos/The'):
+					print('Here')
 			m = MP3Data()
 			arrMp3Data = m.getTagsFromFile(curfile)
 			self.db.addline_tablesongs(arrMp3Data)
