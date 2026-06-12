@@ -707,17 +707,20 @@ class AlbumPlayerDlg(QDialog):
 		
 		self.setWindowTitle('Select Album')
 		self.COVER_SIZE_ABP = 150
-		maxCoversInRow = 2
+		self.PADDING = 15 # Puffer für Abstände zwischen den Buttons
+		
+		# Basis-Layout initialisieren
+		self.scroll = QScrollArea(self)
+		self.scroll.setWidgetResizable(True)
+		self.content_widget = QWidget()
+		self.grid = QGridLayout(self.content_widget)
+		self.scroll.setWidget(self.content_widget)
+		
+		layout = QVBoxLayout(self)
+		layout.addWidget(self.scroll)
+		self.setLayout(layout)
 
-		scroll = QScrollArea(self)
-		scroll.setWidgetResizable(True)
-		content_widget = QWidget()
-		grid = QGridLayout(content_widget)
-
-###		self.pbArray = []
-
-		cur_x = 0
-		cur_y = 0
+		self.pbArray = [] # Liste, um die erstellten Buttons zu referenzieren
 		
 ###		d_imagpaths = {}
 		cmd = 'SELECT * FROM ALBUMS ORDER BY ARTIST ASC, ALBUM ASC;'
@@ -762,28 +765,45 @@ class AlbumPlayerDlg(QDialog):
 				pb.setText(artist_name + '\n' + album_name)
 				
 			pb.setFixedSize(self.COVER_SIZE_ABP, self.COVER_SIZE_ABP)
-
-			# Add the button to the grid layout
-			grid.addWidget(pb, cur_x, cur_y)
-
-			# Connect the button's clicked signal to a specific function
 			pb.clicked.connect(partial(self.on_album_button_clicked, album_name, artist_name, album_path))
+			
+			self.pbArray.append(pb)
 
-			# Update grid coordinates
-			if cur_y > maxCoversInRow:
+		# Initiales Anordnen der Buttons ausführen
+		self.rearrange_buttons()
+
+	def resizeEvent(self, event):
+		"""Wird automatisch von Qt aufgerufen, sobald das Fenster vergrößert/verkleinert wird."""
+		super(AlbumPlayerDlg, self).resizeEvent(event)
+		self.rearrange_buttons()
+
+	def rearrange_buttons(self):
+		"""Berechnet die Spaltenanzahl basierend auf der aktuellen Breite neu."""
+		if not self.pbArray:
+			return
+
+		# Verfügbare Breite des Scroll-Inhalts abrufen (Abzug für die Scrollbar einplanen)
+		available_width = self.scroll.viewport().width()
+		
+		# Berechnen, wie viele Buttons inklusive Puffer nebeneinander passen (mindestens 1)
+		buttons_per_row = max(1, available_width // (self.COVER_SIZE_ABP + self.PADDING))
+
+		# Alle Buttons aus dem Grid entfernen (ohne sie zu löschen)
+		for i in reversed(range(self.grid.count())): 
+			widget = self.grid.itemAt(i).widget()
+			if widget is not None:
+				self.grid.removeWidget(widget)
+
+		# Buttons basierend auf der neuen Spaltenanzahl im Raster verteilen
+		cur_x = 0
+		cur_y = 0
+		for pb in self.pbArray:
+			self.grid.addWidget(pb, cur_x, cur_y)
+			cur_y += 1
+			if cur_y >= buttons_per_row:
 				cur_y = 0
 				cur_x += 1
-			else:
-				cur_y += 1
-
-		# Set the content widget as the scroll area's widget
-		scroll.setWidget(content_widget)
-
-		# Set the layout for the dialog
-		layout = QVBoxLayout(self)
-		layout.addWidget(scroll)
-		self.setLayout(layout)
-		
+				
 	def on_album_button_clicked(self, album_name, artist_name, album_path):
 		# print(f"Album clicked: {album_name} by {artist_name}")
 		print('<on_album_button_clicked>Now playing album: ' + album_path)
