@@ -211,7 +211,11 @@ class MP3Data:
 			tags  = ID3(file)
 			artist = audio2.get('artist', ['Unknown'])[0].replace('/', '_').replace('"', '')
 			album = audio2.get('album', ['Unknown'])[0].replace('/', '_').replace('"', '')
-			img_name =  os.path.join(self.imagedirectory, artist + '_' + album + '.jpg').replace('?','_').replace(':','_').replace(' ','')
+				
+			# Einheitliche Bereinigung des Dateinamens
+			clean_filename = (artist + '_' + album + '.jpg').replace('?', '_').replace(':', '_').replace(' ', '')
+			img_name = os.path.join(self.imagedirectory, clean_filename)
+				
 			if bDebug:
 				print('<IMGNAME>' + img_name)
 			# Check if the MP3 file contains an embedded image
@@ -226,6 +230,8 @@ class MP3Data:
 							print('<Embedded_image>' + img_name)
 						with open(img_name, 'wb') as img_file:
 							img_file.write(image_data)
+							img_file.flush()
+							os.fsync(img_file.fileno())
 						# break
 		return img_name
 	
@@ -560,8 +566,8 @@ class MainWindow(QtWidgets.QDialog):
 		for curfile in files:
 			if bDebug:
 				print('\tprocessing: ' + curfile)
-				if curfile.startswith('/home/blju/Sound/Clash/Videos/The'):
-					print('Here')
+				# if curfile.startswith('/home/blju/Sound/Clash/Videos/The'):
+					# print('Here')
 			m = MP3Data()
 			arrMp3Data = m.getTagsFromFile(curfile)
 			self.db.addline_tablesongs(arrMp3Data)
@@ -708,19 +714,19 @@ class AlbumPlayerDlg(QDialog):
 		content_widget = QWidget()
 		grid = QGridLayout(content_widget)
 
-		self.pbArray = []
+###		self.pbArray = []
 
 		cur_x = 0
 		cur_y = 0
 		
-		d_imagpaths = {}
-		cmd = 'select * from ALBUMS'
+###		d_imagpaths = {}
+		cmd = 'SELECT * FROM ALBUMS ORDER BY ARTIST ASC, ALBUM ASC;'
 		try:
 			conn = sqlite3.connect(self.main_window.db.dbname)
 			self.cursor = conn.cursor()
 			print('<SQL>' + cmd)
 			self.cursor.execute(cmd)
-			conn.commit()
+###			conn.commit()
 			album_table = self.cursor.fetchall() ### list of tuples !
 			conn.close()
 			nr_albums = len(album_table)
@@ -729,6 +735,9 @@ class AlbumPlayerDlg(QDialog):
 			print(e)
 			# sys.exit(-1)
 			return
+			
+		if bDebug:
+			print('<NR_ALBUMS> found '+ str(nr_albums) + ' albums')
 
 		for i in range(0, nr_albums):
 			pb = QPushButton()
@@ -737,15 +746,21 @@ class AlbumPlayerDlg(QDialog):
 			artist_name = album_table[i][0].replace('/', '_').replace('"','')  # artist
 			album_path = album_table[i][5] # fullpath
 
-			if not os.path.exists(im):
-				print('<E_IMAGE_NOT_FOUND>' + im + ' [maybe you should update the database]')
-				sys.exit(-1) # TODO: do not exit, but use a standard image instead .. or try to extract it from the songs of the album ... or write only the album/artist name on the button ...
-
-			pixmap = QPixmap(im)
-			pixmap = pixmap.scaled(self.COVER_SIZE_ABP, self.COVER_SIZE_ABP)
-			ButtonIcon = QIcon(pixmap)
-			pb.setIconSize(pixmap.rect().size())
-			pb.setIcon(ButtonIcon)
+			pixmap = QPixmap()
+			if os.path.exists(im):
+				pixmap.load(im)
+				
+			if not pixmap.isNull():
+				pixmap = pixmap.scaled(self.COVER_SIZE_ABP, self.COVER_SIZE_ABP, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+				ButtonIcon = QIcon(pixmap)
+				pb.setIconSize(pixmap.rect().size())
+				pb.setIcon(ButtonIcon)
+			else:
+				if bDebug:
+					print('<E_IMAGE_NOT_FOUND>' + album_path + ' [maybe you should update the database]')
+#				sys.exit(-1) # TODO: do not exit, but use a standard image instead .. or try to extract it from the songs of the album ... or write only the album/artist name on the button ...
+				pb.setText(artist_name + '\n' + album_name)
+				
 			pb.setFixedSize(self.COVER_SIZE_ABP, self.COVER_SIZE_ABP)
 
 			# Add the button to the grid layout
@@ -807,13 +822,13 @@ class TabWindow(QMainWindow):
 		model1 = TableModel(data1, headers1)
 		table_view1 = QTableView()
 		table_view1.setModel(model1)
-		table_view1.verticalHeader().hide();
+		table_view1.verticalHeader().hide()
 
 		# Create the second table
 		model2 = TableModel(data2, headers2)
 		table_view2 = QTableView()
 		table_view2.setModel(model2)
-		table_view2.verticalHeader().hide();
+		table_view2.verticalHeader().hide()
 
 		# Add the tables to the tabs
 		tab_widget.addTab(table_view1, 'Songs')
