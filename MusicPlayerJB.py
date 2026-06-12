@@ -973,7 +973,17 @@ class DB:
 		rows = []
 		
 		try:
-			sql = 'SELECT * FROM ' + table + ';'
+			# Abfrage je nach Tabelle anpassen, um die Sortierung zu erzwingen
+			if table.upper() == 'SONGS':
+				# Sortiert die Song-Tabelle zuerst nach ARTIST, dann nach TITLE
+				sql = 'SELECT * FROM Songs ORDER BY ARTIST ASC, TITLE ASC;'
+			elif table.upper() == 'ALBUMS':
+				# Sortiert die Album-Tabelle zuerst nach ARTIST, dann nach ALBUM
+				sql = 'SELECT * FROM Albums ORDER BY ARTIST ASC, ALBUM ASC;'
+			else:
+				# Fallback für eventuelle andere Tabellen
+				sql = 'SELECT * FROM ' + table + ';'
+
 			self.exec_sql(sql, False)
 
 			rows = self.cursor.fetchall()
