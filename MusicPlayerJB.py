@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
     QStatusBar, QPushButton, QGridLayout, QScrollArea, QWidget, QVBoxLayout,
     QDialogButtonBox, QMessageBox, QTableView, QTabWidget
 )
-from PyQt5.QtCore import Qt, QUrl
+from PyQt5.QtCore import Qt, QUrl, QSortFilterProxyModel
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent, QMediaPlaylist, QMediaMetaData
 from PyQt5.QtCore import pyqtRemoveInputHook # see comment below
 from PyQt5.QtGui import QPixmap, QIcon
@@ -571,8 +571,12 @@ class MainWindow(QtWidgets.QDialog):
 			m = MP3Data()
 			arrMp3Data = m.getTagsFromFile(curfile)
 			self.db.addline_tablesongs(arrMp3Data)
-			if not arrMp3Data[2] in lAllAlbums:
-				lAllAlbums.append(arrMp3Data[2])
+			# HIER WAR DER FEHLER: Wir holen uns Künstler und Albumtitel
+			artist_key = arrMp3Data[1] # Artist
+			album_key = arrMp3Data[3]  # Album
+			album_identifier = (artist_key, album_key)
+			if not album_identifier in lAllAlbums:
+				lAllAlbums.append(album_identifier)
 				if bRegenerateAlbumImages:
 					imagename = m.getImage(curfile)
 				self.db.addline_tablealbums(arrMp3Data, imagename)
@@ -831,29 +835,78 @@ class TabWindow(QMainWindow):
 	def __init__(self, headers1, data1, headers2, data2):
 		super(TabWindow, self).__init__()
 		self.setWindowTitle('My music Collection')
-		self.resize(600, 400)
+		self.resize(800, 600) # Etwas größer für Filter-Eingaben
 
-		# Create the QTabWidget
-		tab_widget = QTabWidget(self)
-		self.setCentralWidget(tab_widget)
+		# Haupt-Widget und Layout erstellen
+		main_widget = QWidget()
+		self.setCentralWidget(main_widget)
+		main_layout = QVBoxLayout(main_widget)
 
+		# TabWidget erstellen und dem Hauptlayout hinzufügen
+		tab_widget = QTabWidget()
+		main_layout.addWidget(tab_widget)
 
-		# Create the first table
+		# ----------------------------------------------------
+		# TAB 1: SONGS (mit Filter)
+		# ----------------------------------------------------
+		songs_container = QWidget()
+		songs_layout = QVBoxLayout(songs_container)
+
+		# Excel-artiges Suchfeld für Songs
+		self.filter_le1 = QtWidgets.QLineEdit()
+		self.filter_le1.setPlaceholderText("Songs filtern (Sucht in allen Spalten wie in Excel)...")
+		songs_layout.addWidget(self.filter_le1)
+
+		# Das originale Datenmodell für Songs
 		model1 = TableModel(data1, headers1)
-		table_view1 = QTableView()
-		table_view1.setModel(model1)
-		table_view1.verticalHeader().hide()
-
-		# Create the second table
-		model2 = TableModel(data2, headers2)
-		table_view2 = QTableView()
-		table_view2.setModel(model2)
-		table_view2.verticalHeader().hide()
-
-		# Add the tables to the tabs
-		tab_widget.addTab(table_view1, 'Songs')
-		tab_widget.addTab(table_view2, 'Albums')
 		
+		# Das Proxy-Modell dazwischenschalten (Zuständig für Sortierung und Filter)
+		self.proxy_model1 = QSortFilterProxyModel()
+		self.proxy_model1.setSourceModel(model1) # Verbinde Datenquelle mit Proxy
+		self.proxy_model1.setFilterKeyColumn(-1)  # -1 bedeutet: Durchsuche ALLE Spalten auf einmal
+		self.proxy_model1.setFilterCaseSensitivity(Qt.CaseInsensitive) # Groß-/Kleinschreibung ignorieren
+
+		table_view1 = QTableView()
+		table_view1.setModel(self.proxy_model1) # Die View bekommt das Proxy-Modell!
+		table_view1.setSortingEnabled(True)     # Klick auf Spaltenüberschrift sortiert automatisch!
+		table_view1.verticalHeader().hide()
+		songs_layout.addWidget(table_view1)
+
+		# Event-Verknüpfung: Wenn Text getippt wird, live filtern
+		self.filter_le1.textChanged.connect(self.proxy_model1.setFilterFixedString)
+
+		# ----------------------------------------------------
+		# TAB 2: ALBUMS (mit Filter)
+		# ----------------------------------------------------
+		albums_container = QWidget()
+		albums_layout = QVBoxLayout(albums_container)
+
+		# Excel-artiges Suchfeld für Alben
+		self.filter_le2 = QtWidgets.QLineEdit()
+		self.filter_le2.setPlaceholderText("Alben filtern...")
+		albums_layout.addWidget(self.filter_le2)
+
+		# Das originale Datenmodell für Alben
+		model2 = TableModel(data2, headers2)
+		
+		# Das Proxy-Modell für Alben
+		self.proxy_model2 = QSortFilterProxyModel()
+		self.proxy_model2.setSourceModel(model2)
+		self.proxy_model2.setFilterKeyColumn(-1)  # Durchsuche alle Spalten
+		self.proxy_model2.setFilterCaseSensitivity(Qt.CaseInsensitive)
+
+		table_view2 = QTableView()
+		table_view2.setModel(self.proxy_model2)
+		table_view2.setSortingEnabled(True) # Sortierung aktivieren
+		table_view2.verticalHeader().hide()
+		albums_layout.addWidget(table_view2)
+
+		# Event-Verknüpfung für das Album-Suchfeld
+		self.filter_le2.textChanged.connect(self.proxy_model2.setFilterFixedString)
+
+		# Tabs dem Tab-Widget hinzufügen
+		tab_widget.addTab(songs_container, 'Songs')
+		tab_widget.addTab(albums_container, 'Albums')
 class DB:		
 	def __init__(self, dbname):
 		self.dbname = dbname
