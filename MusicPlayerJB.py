@@ -15,9 +15,10 @@ from PyQt5 import QtWidgets, uic
 from PyQt5.QtWidgets import (
     QAction, QApplication, QLabel, QMainWindow, QMenu, QDialog, QFileDialog,
     QStatusBar, QPushButton, QGridLayout, QScrollArea, QWidget, QVBoxLayout,
-    QDialogButtonBox, QMessageBox, QTableView, QTabWidget
+    QDialogButtonBox, QMessageBox, QTableView, QTabWidget, 
+	QComboBox, QWidgetAction, QCheckBox, QListWidget, QListWidgetItem, QHBoxLayout, QLineEdit
 )
-from PyQt5.QtCore import Qt, QUrl, QSortFilterProxyModel
+from PyQt5.QtCore import Qt, QUrl, QSortFilterProxyModel, QPoint
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent, QMediaPlaylist, QMediaMetaData
 from PyQt5.QtCore import pyqtRemoveInputHook # see comment below
 from PyQt5.QtGui import QPixmap, QIcon
@@ -831,82 +832,212 @@ class AlbumPlayerDlg(QDialog):
 			# for line in lines:
 				# playlist.addMedia(QMediaContent(QUrl.fromLocalFile(line.strip())))
 
+class ExcelFilterHeader(QtWidgets.QHeaderView):
+	"""Erweiterter Tabellenkopf, der bei Klick das Excel-Filtermenü öffnet."""
+	def __init__(self, orientation, parent=None):
+		super().__init__(orientation, parent)
+		self.setSectionsClickable(True)
+		self.sectionClicked.connect(self.show_filter_menu)
+		self.active_filters = {} # Speichert die ausgewählten Werte pro Spalte: {col_idx: {set_of_allowed_values}}
+
+	def show_filter_menu(self, logical_index):
+		# Das Proxy-Modell und das originale Modell holen
+		proxy_model = self.parent().model()
+		source_model = proxy_model.sourceModel()
+		
+		# 1. Alle aktuell eindeutigen Werte aus dieser Spalte sammeln (für die Checkboxen)
+		unique_values = set()
+		for row in range(source_model.rowCount(None)):
+			val = str(source_model.index(row, logical_index).data())
+			unique_values.add(val if val.strip() else "(leer)")
+		
+		sorted_values = sorted(list(unique_values))
+
+		# 2. Das Popup-Menü erstellen
+		menu = QMenu(self)
+		menu.setStyleSheet("QMenu { background-color: #f0f0f0; border: 1px solid #999; }")
+
+		# --- Sektion A: Sortierung ---
+		act_asc = menu.addAction("▲ Aufsteigend sortieren")
+		act_desc = menu.addAction("▼ Absteigend sortieren")
+		menu.addSeparator()
+
+		# --- Sektion B: Das Live-Suchfeld im Popup ---
+		search_widget = QWidget()
+		search_layout = QVBoxLayout(search_widget)
+		search_le = QLineEdit()
+		search_le.setPlaceholderText("Elemente suchen...")
+		search_layout.addWidget(search_le)
+
+		# --- Sektion C: Die Checkliste (QListWidget mit Checkboxes) ---
+		list_widget = QListWidget()
+		list_widget.setMaximumHeight(200)
+		search_layout.addWidget(list_widget)
+
+		# "Alle auswählen"-Checkbox voranstellen
+		item_all = QListWidgetItem(list_widget)
+		cb_all = QCheckBox(" Alle")
+		cb_all.setChecked(logical_index not in self.active_filters)
+		list_widget.setItemWidget(item_all, cb_all)
+
+		# Die einzelnen Werte als Checkboxen hinzufügen
+		checkbox_map = {}
+		for val in sorted_values:
+			item = QListWidgetItem(list_widget)
+			cb = QCheckBox(f" {val}")
+			
+			# Zustand wiederherstellen (falls schon mal gefiltert wurde)
+			if logical_index in self.active_filters:
+				cb.setChecked(val in self.active_filters[logical_index])
+			else:
+				cb.setChecked(True)
+				
+			list_widget.setItemWidget(item, cb)
+			checkbox_map[val] = cb
+
+		# Suchfeld-Logik: Liste beim Tippen live filtern
+		def filter_list_items(text):
+			for val, cb in checkbox_map.items():
+				# Suchtreffer anzeigen, den Rest verstecken
+				for idx in range(list_widget.count()):
+					it = list_widget.item(idx)
+					w = list_widget.itemWidget(it)
+					if w != cb_all:
+						it.setHidden(text.lower() not in w.text().lower())
+
+		search_le.textChanged.connect(filter_list_items)
+
+		# "Alle"-Checkbox steuert alle Unter-Checkboxen
+		def toggle_all(state):
+			for cb in checkbox_map.values():
+				cb.setChecked(state == Qt.Checked)
+		cb_all.stateChanged.connect(toggle_all)
+
+		# Das Layout in eine WidgetAction packen, damit es ins QMenu passt
+		action_layout = QWidgetAction(menu)
+		action_layout.setDefaultWidget(search_widget)
+		menu.addAction(action_layout)
+
+		# --- Sektion D: Die OK / Abbrechen Buttons ---
+		btn_widget = QWidget()
+		btn_layout = QHBoxLayout(btn_widget)
+		btn_ok = QPushButton("OK")
+		btn_cancel = QPushButton("Abbrechen")
+		btn_layout.addWidget(btn_cancel)
+		btn_layout.addWidget(btn_ok)
+		
+		action_btns = QWidgetAction(menu)
+		action_btns.setDefaultWidget(btn_widget)
+		menu.addAction(action_btns)
+
+		# Button-Aktionen definieren
+		btn_cancel.clicked.connect(menu.close)
+		
+		# Variable zur Speicherung des Klick-Ergebnisses
+		self.menu_result = "cancel"
+		def on_ok():
+			self.menu_result = "ok"
+			menu.close()
+		btn_ok.clicked.connect(on_ok)
+
+		# Menü exakt unter der angeklickten Spalte anzeigen
+		header_pos = self.mapToGlobal(self.pos())
+		section_pos = self.sectionPosition(logical_index)
+		
+		# Zeigt das Menü an und wartet, welche Action ausgelöst wurde
+		selected_action = menu.exec_(header_pos + QPoint(section_pos, self.height()))
+
+		# 3. Auswertung NACHDEM das Menü geschlossen wurde
+		if selected_action == act_asc:
+			proxy_model.sort(logical_index, Qt.AscendingOrder)
+		elif selected_action == act_desc:
+			proxy_model.sort(logical_index, Qt.DescendingOrder)
+		elif self.menu_result == "ok":
+			# Erlaubte Werte aus den Checkboxen sammeln
+			allowed = set()
+			for val, cb in checkbox_map.items():
+				if cb.isChecked():
+					allowed.add(val)
+
+			if len(allowed) == len(sorted_values):
+				# Alles ausgewählt -> Filter für diese Spalte entfernen
+				self.active_filters.pop(logical_index, None)
+			else:
+				# Filter setzen
+				self.active_filters[logical_index] = allowed
+
+			# Zwingt das Proxy-Modell, die Tabelle JETZT live neu zu filtern
+			proxy_model.invalidateFilter()
+
+class CustomFilterProxyModel(QSortFilterProxyModel):
+	"""Erweitertes Proxy-Modell, das komplexe Multi-Checkbox-Filter auswertet."""
+	def __init__(self, parent=None):
+		super().__init__(parent)
+		self.header_view = None
+
+	def filterAcceptsRow(self, source_row, source_parent):
+		if not self.header_view or not self.header_view.active_filters:
+			return True # Kein Filter aktiv -> Zeile anzeigen
+
+		source_model = self.sourceModel()
+		
+		# Jede Spalte prüfen, ob ein Filter vorliegt
+		for col_idx, allowed_values in self.header_view.active_filters.items():
+			index = source_model.index(source_row, col_idx, source_parent)
+			val = str(source_model.data(index, Qt.DisplayRole))
+			if not val.strip():
+				val = "(leer)"
+				
+			# Wenn der Wert der Zelle NICHT in den erlaubten Checkbox-Werten ist -> Zeile ausblenden
+			if val not in allowed_values:
+				return False
+				
+		return True
+
 class TabWindow(QMainWindow):
 	def __init__(self, headers1, data1, headers2, data2):
 		super(TabWindow, self).__init__()
-		self.setWindowTitle('My music Collection')
-		self.resize(800, 600) # Etwas größer für Filter-Eingaben
+		self.setWindowTitle('My music Collection (Excel Autofilter Mode)')
+		self.resize(1000, 700)
 
-		# Haupt-Widget und Layout erstellen
-		main_widget = QWidget()
-		self.setCentralWidget(main_widget)
-		main_layout = QVBoxLayout(main_widget)
-
-		# TabWidget erstellen und dem Hauptlayout hinzufügen
-		tab_widget = QTabWidget()
-		main_layout.addWidget(tab_widget)
+		tab_widget = QTabWidget(self)
+		self.setCentralWidget(tab_widget)
 
 		# ----------------------------------------------------
-		# TAB 1: SONGS (mit Filter)
+		# TAB 1: SONGS
 		# ----------------------------------------------------
-		songs_container = QWidget()
-		songs_layout = QVBoxLayout(songs_container)
-
-		# Excel-artiges Suchfeld für Songs
-		self.filter_le1 = QtWidgets.QLineEdit()
-		self.filter_le1.setPlaceholderText("Songs filtern (Sucht in allen Spalten wie in Excel)...")
-		songs_layout.addWidget(self.filter_le1)
-
-		# Das originale Datenmodell für Songs
 		model1 = TableModel(data1, headers1)
-		
-		# Das Proxy-Modell dazwischenschalten (Zuständig für Sortierung und Filter)
-		self.proxy_model1 = QSortFilterProxyModel()
-		self.proxy_model1.setSourceModel(model1) # Verbinde Datenquelle mit Proxy
-		self.proxy_model1.setFilterKeyColumn(-1)  # -1 bedeutet: Durchsuche ALLE Spalten auf einmal
-		self.proxy_model1.setFilterCaseSensitivity(Qt.CaseInsensitive) # Groß-/Kleinschreibung ignorieren
+		self.proxy_model1 = CustomFilterProxyModel()
+		self.proxy_model1.setSourceModel(model1)
 
 		table_view1 = QTableView()
-		table_view1.setModel(self.proxy_model1) # Die View bekommt das Proxy-Modell!
-		table_view1.setSortingEnabled(True)     # Klick auf Spaltenüberschrift sortiert automatisch!
-		table_view1.verticalHeader().hide()
-		songs_layout.addWidget(table_view1)
-
-		# Event-Verknüpfung: Wenn Text getippt wird, live filtern
-		self.filter_le1.textChanged.connect(self.proxy_model1.setFilterFixedString)
-
-		# ----------------------------------------------------
-		# TAB 2: ALBUMS (mit Filter)
-		# ----------------------------------------------------
-		albums_container = QWidget()
-		albums_layout = QVBoxLayout(albums_container)
-
-		# Excel-artiges Suchfeld für Alben
-		self.filter_le2 = QtWidgets.QLineEdit()
-		self.filter_le2.setPlaceholderText("Alben filtern...")
-		albums_layout.addWidget(self.filter_le2)
-
-		# Das originale Datenmodell für Alben
-		model2 = TableModel(data2, headers2)
+		header1 = ExcelFilterHeader(Qt.Horizontal, table_view1)
+		table_view1.setHorizontalHeader(header1) # Setze den custom Excel-Header!
+		header1.header_view = header1            # Zirkelbezug herstellen
+		self.proxy_model1.header_view = header1  # Verbindung zum FilterModell herstellen
 		
-		# Das Proxy-Modell für Alben
-		self.proxy_model2 = QSortFilterProxyModel()
+		table_view1.setModel(self.proxy_model1)
+		table_view1.verticalHeader().hide()
+
+		# ----------------------------------------------------
+		# TAB 2: ALBUMS
+		# ----------------------------------------------------
+		model2 = TableModel(data2, headers2)
+		self.proxy_model2 = CustomFilterProxyModel()
 		self.proxy_model2.setSourceModel(model2)
-		self.proxy_model2.setFilterKeyColumn(-1)  # Durchsuche alle Spalten
-		self.proxy_model2.setFilterCaseSensitivity(Qt.CaseInsensitive)
 
 		table_view2 = QTableView()
+		header2 = ExcelFilterHeader(Qt.Horizontal, table_view2)
+		table_view2.setHorizontalHeader(header2)
+		self.proxy_model2.header_view = header2
+		
 		table_view2.setModel(self.proxy_model2)
-		table_view2.setSortingEnabled(True) # Sortierung aktivieren
 		table_view2.verticalHeader().hide()
-		albums_layout.addWidget(table_view2)
 
-		# Event-Verknüpfung für das Album-Suchfeld
-		self.filter_le2.textChanged.connect(self.proxy_model2.setFilterFixedString)
-
-		# Tabs dem Tab-Widget hinzufügen
-		tab_widget.addTab(songs_container, 'Songs')
-		tab_widget.addTab(albums_container, 'Albums')
+		# Tabs hinzufügen
+		tab_widget.addTab(table_view1, 'Songs')
+		tab_widget.addTab(table_view2, 'Albums')
+		
 class DB:		
 	def __init__(self, dbname):
 		self.dbname = dbname
