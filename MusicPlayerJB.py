@@ -845,11 +845,39 @@ class ExcelFilterHeader(QtWidgets.QHeaderView):
 		proxy_model = self.parent().model()
 		source_model = proxy_model.sourceModel()
 		
-		# 1. Alle aktuell eindeutigen Werte aus dieser Spalte sammeln (für die Checkboxen)
+		# Den Namen der angeklickten Spalte herausfinden (z.B. "Artist")
+		col_name = source_model._headers[logical_index]
+		
+		# Den Namen der SQL-Tabelle herausfinden, indem wir prüfen, welches Modell aktiv ist
+		# (Wir schauen, ob die Header-Länge zur Songs- oder Albums-Tabelle passt)
+		if len(source_model._headers) > 6:
+			db_table = "Songs"
+		else:
+			db_table = "Albums"
+			
+		# 1. OPTIMIERT: Eindeutige Werte blitzschnell direkt aus der Datenbank holen
 		unique_values = set()
-		for row in range(source_model.rowCount(None)):
-			val = str(source_model.index(row, logical_index).data())
-			unique_values.add(val if val.strip() else "(leer)")
+		try:
+			import sqlite3
+			# Verbindung zur DB des Hauptfensters aufbauen
+			conn = sqlite3.connect(self.parent().parent().main_window.db.dbname)
+			cursor = conn.cursor()
+			
+			# DISTINCT holt jeden Wert nur ein einziges Mal. ORDER BY sortiert es direkt.
+			cmd = f"SELECT DISTINCT {col_name} FROM {db_table} ORDER BY {col_name} ASC;"
+			cursor.execute(cmd)
+			rows = cursor.fetchall()
+			conn.close()
+			
+			for r in rows:
+				val = str(r[0])
+				unique_values.add(val if val.strip() else "(leer)")
+		except Exception as e:
+			print(f"Fehler beim schnellen DB-Filter-Laden: {e}")
+			# Fallback: Falls SQL fehlschlägt, nutzen wir die alte Methode aus der Tabelle
+			for row in range(source_model.rowCount(None)):
+				val = str(source_model.index(row, logical_index).data())
+				unique_values.add(val if val.strip() else "(leer)")
 		
 		sorted_values = sorted(list(unique_values))
 
