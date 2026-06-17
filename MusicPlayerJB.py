@@ -227,8 +227,8 @@ class MP3Data:
 						image_data = tag.data
 						# Save the image to a file - "artist_album.jpg"
 						###img_name = audio['artist'][0] + '_' + audio['album'][0]
-						if bDebug:
-							print('<Embedded_image>' + img_name)
+						# if bDebug:
+							# print('<Embedded_image>' + img_name)
 						with open(img_name, 'wb') as img_file:
 							img_file.write(image_data)
 							img_file.flush()
@@ -561,29 +561,100 @@ class MainWindow(QtWidgets.QDialog):
 		files = glob.glob(self.sounddir + '/**/*.mp?', recursive=True) ### mp4 not supported by mutagen :( -> TODO: search for another lib
 		nFilesToProceed = len(files) # for progress bar
 		self.db.createTables()
+		error_log = []
 		if bDebug:
 			print('=============================================================')
 			print('[Updating DB] started')
-		for curfile in files:
+			
+		# Verwende enumerate, um den aktuellen Index (startend bei 1) mitzuzählen
+		for idx, curfile in enumerate(files, 1):
+			# Prozentwert berechnen
+			percent = (idx / nFilesToProceed) * 100 if nFilesToProceed > 0 else 100
+			
 			if bDebug:
-				print('\tprocessing: ' + curfile)
+				# \r sorgt dafür, dass der Cursor an den Zeilenanfang springt und die Zeile überschreibt
+				sys.stdout.write(f"\r\tProcessing: {percent:.1f}% ({idx}/{nFilesToProceed})")
+				sys.stdout.flush()
 				# if curfile.startswith('/home/blju/Sound/Clash/Videos/The'):
 					# print('Here')
+			
+			# Fortschritt in der GUI-Statusleiste anzeigen
+			self.statusBar.showMessage(f"Datenbank wird aktualisiert: {percent:.1f}% ({idx}/{nFilesToProceed})")
+			# Verhindert, dass die GUI während der Schleife einfriert
+			QApplication.processEvents()
+			
 			m = MP3Data()
 			arrMp3Data = m.getTagsFromFile(curfile)
 			self.db.addline_tablesongs(arrMp3Data)
-			# HIER WAR DER FEHLER: Wir holen uns Künstler und Albumtitel
+			
+			# --- Validierung der Tags laut Vorgabe ---
+			title = arrMp3Data[0].strip()
+			artist = arrMp3Data[1].strip()
+			albumartist = arrMp3Data[2].strip()
+			album = arrMp3Data[3].strip()
+			genre = arrMp3Data[4].strip()
+			cover_avail = arrMp3Data[6]
+			
+			is_sampler = "_Sampler" in os.path.split(curfile)[0] or "_Sampler" in curfile
+			is_mp4 = curfile.lower().endswith('.mp4')
+			
+			# 1. TAG Title nicht enthalten
+			if not title or title == '-':
+				error_log.append(f"<E_MISSING_TITLE> {curfile}")
+				
+			# 2. TAG Artist nicht vorhanden UND kein „_Sampler“
+			if (not artist or artist == '-') and not is_sampler:
+				error_log.append(f"<E_MISSING_ARTIST_NOSAMPLER> {curfile}")
+				
+			# 3. TAG AlbumArtist nicht vorhanden UND Song ist nicht in einem Unterordner von „_Sampler“
+			if (not albumartist or albumartist == '-') and is_sampler:
+				error_log.append(f"<E_MISSING_ARTIST_SAMPLER> {curfile}")
+				
+			# 4. TAG AlbumArtist nicht vorhanden UND Song ist nicht in einem Unterordner von „_Sampler“
+			if albumartist.lower() != 'various' and is_sampler:
+				error_log.append(f"<E_ARTIST_WRONG_SAMPLER> {curfile}")
+				
+			# 5. TAG Album nicht enthalten und Dateiendung ungleich MP4
+			if (not album or album == '-') and not is_mp4:
+				error_log.append(f"<E_MISSING_ALBUM> {curfile}")
+				
+			# 6. TAG Genre nicht enthalten
+			if not genre or genre == '-':
+				error_log.append(f"<E_MISSING_GENRE> {curfile}")
+				
+			# 7. kein embedded cover und Dateiendung ungleich MP4
+			if not cover_avail and not is_mp4:
+				error_log.append(f"<E_MISSING_COVER> {curfile}")
+			# ----------------------------------------
+
 			artist_key = arrMp3Data[1] # Artist
 			album_key = arrMp3Data[3]  # Album
 			album_identifier = (artist_key, album_key)
 			if not album_identifier in lAllAlbums:
 				lAllAlbums.append(album_identifier)
+				imagename = 'NoImage'
 				if bRegenerateAlbumImages:
 					imagename = m.getImage(curfile)
 				self.db.addline_tablealbums(arrMp3Data, imagename)
+				
+		# Fehlerprotokoll in Datei schreiben
+		try:
+			with open("MusicErrors.txt", "w", encoding="utf-8") as error_file:
+				if error_log:
+					error_file.write("\n".join(error_log) + "\n")
+				else:
+					error_file.write("Keine Fehler gefunden.\n")
+			if bDebug:
+				print(f"[Updating DB] {len(error_log)} Warnungen in MusicErrors.txt geschrieben.")
+		except Exception as e:
+			print(f"Fehler beim Schreiben der MusicErrors.txt: {e}")
+
 		if bDebug:
+			print() # Erzeugt einen Zeilenumbruch nach den vielen \r Ausgaben
 			print('[Updating DB] finished')
 			print('=============================================================')
+
+		self.statusBar.showMessage('Datenbank-Aktualisierung abgeschlossen.', 5000)
 
 		with open('sql.log', 'w') as fout:
 			fout.write(self.db.sqltext_dbg)
