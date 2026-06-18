@@ -595,7 +595,7 @@ class MainWindow(QtWidgets.QDialog):
 			genre = arrMp3Data[4].strip()
 			cover_avail = arrMp3Data[6]
 			
-			is_sampler = "_Sampler" in os.path.split(curfile)[0] or "_Sampler" in curfile
+			is_sampler = albumartist.lower() == "various" or "_sampler" in os.path.split(curfile)[0].lower() or "_sampler" in curfile.lower()
 			is_mp4 = curfile.lower().endswith('.mp4')
 			
 			# 1. TAG Title nicht enthalten
@@ -627,9 +627,22 @@ class MainWindow(QtWidgets.QDialog):
 				error_log.append(f"<E_MISSING_COVER> {curfile}")
 			# ----------------------------------------
 
-			artist_key = arrMp3Data[1] # Artist
-			album_key = arrMp3Data[3]  # Album
-			album_identifier = (artist_key, album_key)
+			# WICHTIG: MP4-Dateien komplett für den Album Button Player ignorieren
+			if is_mp4:
+				continue
+
+			# Bestimmung des eindeutigen Alben-Schlüssels (album_identifier)
+			clean_album = album.strip()
+			clean_artist = artist.strip()
+			clean_albumartist = albumartist.strip()
+
+			if clean_albumartist.lower() == "various":
+				# Für Sampler nehmen wir immer "Various" + Albumname als Schlüssel
+				album_identifier = ("Various", clean_album)
+			else:
+				# Für Nicht-Sampler nehmen wir den echten Artist + Albumname (da AlbumArtist selten gesetzt ist)
+				album_identifier = (clean_artist, clean_album)
+				
 			if not album_identifier in lAllAlbums:
 				lAllAlbums.append(album_identifier)
 				imagename = 'NoImage'
