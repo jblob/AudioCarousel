@@ -792,79 +792,167 @@ class MainWindow(QtWidgets.QDialog):
 class AlbumPlayerDlg(QDialog):
 	def __init__(self, main_window):
 		super(AlbumPlayerDlg, self).__init__()
-		self.main_window = main_window  # Reference to MainWindow
+		self.main_window = main_window
 		
-		self.setWindowTitle('Select Album')
-		self.COVER_SIZE_ABP = 150
-		self.PADDING = 15 # Puffer für Abstände zwischen den Buttons
+		self.setWindowTitle('CD Cover Karussell')
+		self.resize(900, 420)
+		self.COVER_SIZE_ACTIVE = 220  # Das mittlere Album ist schön groß
+		self.COVER_SIZE_SMALL = 140   # Die seitlichen Alben sind kleiner
+		self.PADDING = 15
 		
-		# Basis-Layout initialisieren
+		self.main_layout = QVBoxLayout(self)
+		
+		# Suchmaske
+		self.search_le = QLineEdit(self)
+		self.search_le.setPlaceholderText("Nach Künstler, Album oder Genre filtern...")
+		self.search_le.setStyleSheet("QLineEdit { padding: 8px; font-size: 14px; border-radius: 4px; }")
+		self.search_le.textChanged.connect(self.on_search_changed)
+		self.main_layout.addWidget(self.search_le)
+		
+		# Scroll-Bereich
 		self.scroll = QScrollArea(self)
 		self.scroll.setWidgetResizable(True)
+		self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+		self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+		
+		# WICHTIG: Wir fangen das Scroll-Ereignis ab, um den Skalierungs-Effekt live zu berechnen
+		self.scroll.horizontalScrollBar().valueChanged.connect(self.update_carousel_effects)
+		
 		self.content_widget = QWidget()
-		self.grid = QGridLayout(self.content_widget)
+		self.hbox_layout = QHBoxLayout(self.content_widget)
+		self.hbox_layout.setAlignment(Qt.AlignCenter)
+		# Wir fügen links und rechts "Spacer" (Freiraum) hinzu, damit das erste und letzte Album in der Mitte stehen können
+		self.hbox_layout.addStretch(1)
+		
 		self.scroll.setWidget(self.content_widget)
-		
-		layout = QVBoxLayout(self)
-		layout.addWidget(self.scroll)
-		self.setLayout(layout)
+		self.main_layout.addWidget(self.scroll)
 
-		self.pbArray = [] # Liste, um die erstellten Buttons zu referenzieren
+		self.all_albums_data = []
+		self.load_data_from_db()
 		
-###		d_imagpaths = {}
-		cmd = 'SELECT * FROM ALBUMS ORDER BY ARTIST ASC, ALBUM ASC;'
+		# Nach dem Laden einmalig den Effekt berechnen
+		self.update_carousel_effects()
+		
+	def load_data_from_db(self):
+		cmd = 'SELECT ARTIST, ALBUM, GENRE, COVER_PATH, FULLPATH FROM ALBUMS ORDER BY ARTIST ASC, ALBUM ASC;'
 		try:
 			conn = sqlite3.connect(self.main_window.db.dbname)
-			self.cursor = conn.cursor()
-			print('<SQL>' + cmd)
-			self.cursor.execute(cmd)
-###			conn.commit()
-			album_table = self.cursor.fetchall() ### list of tuples !
+			cursor = conn.cursor()
+			cursor.execute(cmd)
+			album_table = cursor.fetchall()
 			conn.close()
-			nr_albums = len(album_table)
 		except sqlite3.Error as e:
-			ret_text += str(e)
-			print(e)
-			# sys.exit(-1)
+			print(f"SQL-Fehler im Karussell: {e}")
 			return
 			
-		if bDebug:
-			print('<NR_ALBUMS> found '+ str(nr_albums) + ' albums')
-
-		for i in range(0, nr_albums):
+		for row in album_table:
+			artist_name = row[0].replace('/', '_').replace('"','')
+			album_name = row[1].replace('/', '_').replace('"','')
+			genre_name = row[2] if row[2] else ""
+			im_path = row[3]
+			album_path = row[4]
+			
 			pb = QPushButton()
-			im = album_table[i][4]  # cover path
-			album_name = album_table[i][2].replace('/', '_').replace('"','')  # album name
-			artist_name = album_table[i][0].replace('/', '_').replace('"','')  # artist
-			album_path = album_table[i][5] # fullpath
-
+			pb.setFixedSize(self.COVER_SIZE_ACTIVE, self.COVER_SIZE_ACTIVE)
+			
+			# Pixmap laden
 			pixmap = QPixmap()
-			if os.path.exists(im):
-				pixmap.load(im)
-				
-			if not pixmap.isNull():
-				pixmap = pixmap.scaled(self.COVER_SIZE_ABP, self.COVER_SIZE_ABP, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-				ButtonIcon = QIcon(pixmap)
-				pb.setIconSize(pixmap.rect().size())
-				pb.setIcon(ButtonIcon)
-			else:
-				if bDebug:
-					print('<E_IMAGE_NOT_FOUND>' + album_path + ' [maybe you should update the database]')
-#				sys.exit(-1) # TODO: do not exit, but use a standard image instead .. or try to extract it from the songs of the album ... or write only the album/artist name on the button ...
-				pb.setText(artist_name + '\n' + album_name)
-				
-			pb.setFixedSize(self.COVER_SIZE_ABP, self.COVER_SIZE_ABP)
+			if os.path.exists(im_path):
+				pixmap.load(im_path)
+			
+			# Wir speichern uns das originale, unskalierte Pixmap im Objekt, 
+			# damit wir es beim Scrollen ohne Qualitätsverlust dynamisch verkleinern/vergrößern können
+			pb.original_pixmap = pixmap if not pixmap.isNull() else None
+			pb.fallback_text = f"{artist_name}\n\n{album_name}"
+			
 			pb.clicked.connect(partial(self.on_album_button_clicked, album_name, artist_name, album_path))
 			
-			self.pbArray.append(pb)
+			self.all_albums_data.append({
+				'artist': artist_name,
+				'album': album_name,
+				'genre': genre_name,
+				'path': album_path,
+				'widget': pb
+			})
+			
+			# Vor dem letzten Stretch einfügen
+			self.hbox_layout.insertWidget(self.hbox_layout.count() - 1, pb)
 
-		# Initiales Anordnen der Buttons ausführen
-		self.rearrange_buttons()
+	def update_carousel_effects(self):
+		"""Berechnet basierend auf der Scroll-Position, welche Cover groß und welche klein gezeichnet werden."""
+		# Mittelpunkt des sichtbaren Scroll-Fensters berechnen
+		view_width = self.scroll.viewport().width()
+		center_x = view_width / 2
+		
+		for album in self.all_albums_data:
+			widget = album['widget']
+			if not widget.isVisible():
+				continue
+				
+			# Position des Buttons relativ zum sichtbaren Fenster bestimmen
+			widget_pos = widget.mapTo(self.scroll.viewport(), QPoint(0, 0))
+			widget_center_x = widget_pos.x() + (widget.width() / 2)
+			
+			# Abstand zur Mitte berechnen
+			distance = abs(center_x - widget_center_x)
+			
+			# Schwellenwert: Innerhalb von 150 Pixeln zur Mitte wird das Cover groß, außerhalb wird es kleiner
+			max_distance = 250.0
+			factor = max(0.0, min(1.0, distance / max_distance)) # Wert zwischen 0 (genau Mitte) und 1 (weit weg)
+			
+			# Interpolation der Größe zwischen ACTIVE und SMALL
+			current_size = int(self.COVER_SIZE_ACTIVE - (factor * (self.COVER_SIZE_ACTIVE - self.COVER_SIZE_SMALL)))
+			widget.setFixedSize(current_size, current_size)
+			
+			# Icon neu skalieren basierend auf der aktuellen Größe
+			if widget.original_pixmap:
+				scaled_pixmap = widget.original_pixmap.scaled(current_size - 10, current_size - 10, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+				widget.setIcon(QIcon(scaled_pixmap))
+				widget.setIconSize(scaled_pixmap.rect().size())
+				
+				# Stylesheet anpassen: Aktives Cover kriegt einen hellen Rahmen, inaktive verblassen leicht
+				if factor < 0.3:
+					widget.setStyleSheet(f"QPushButton {{ border: 3px solid #ffffff; background: #000; padding: 0px; }}")
+				else:
+					widget.setStyleSheet(f"QPushButton {{ border: 2px solid #444444; background: #000; padding: 0px; }}")
+			else:
+				# Fallback-Text-Button stylen
+				widget.setText(widget.fallback_text if current_size > 150 else "...")
+				widget.setStyleSheet(f"QPushButton {{ background-color: #222; color: #888; font-size: {max(8, int(11 - factor*3))}px; }}")
+
+	def on_search_changed(self, text):
+		search_term = text.lower().strip()
+		
+		for album in self.all_albums_data:
+			self.hbox_layout.removeWidget(album['widget'])
+			album['widget'].setParent(None)
+			
+		for album in self.all_albums_data:
+			if (search_term in album['artist'].lower() or 
+				search_term in album['album'].lower() or 
+				search_term in album['genre'].lower()):
+				
+				self.hbox_layout.insertWidget(self.hbox_layout.count() - 1, album['widget'])
+				album['widget'].show()
+				
+		# Nach dem Filtern den Effekt für die verbliebenen Cover neu berechnen
+		self.update_carousel_effects()
 
 	def resizeEvent(self, event):
-		"""Wird automatisch von Qt aufgerufen, sobald das Fenster vergrößert/verkleinert wird."""
+		"""Wird aufgerufen, wenn der User das Fenster groß/klein zieht – stellt sicher, dass die Mitte stimmt."""
 		super(AlbumPlayerDlg, self).resizeEvent(event)
-		self.rearrange_buttons()
+		self.update_carousel_effects()
+
+	def on_album_button_clicked(self, album_name, artist_name, album_path):
+		print('<on_album_button_clicked> Spiele Album: ' + album_path)
+		plgen = PlaylistGenerator()
+		playlistfile = artist_name + '_' + album_name + '.m3u'
+		plgen.genCompletePlaylistFromDirectory(album_path, playlistfile, False)
+
+		self.main_window.playlist = Utils.load_playlist_from_file(playlistfile)
+		self.main_window.player.setPlaylist(self.main_window.playlist)
+		self.main_window.player.play()
+		self.accept()
 
 	def rearrange_buttons(self):
 		"""Berechnet die Spaltenanzahl basierend auf der aktuellen Breite neu."""
