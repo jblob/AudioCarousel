@@ -23,6 +23,7 @@ from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent, QMediaPlaylist, QMed
 from PyQt5.QtCore import pyqtRemoveInputHook # see comment below
 from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtCore import QAbstractTableModel
+from PyQt5.QtWidgets import QStackedWidget
 
 # Third-party library imports
 import mutagen
@@ -794,43 +795,71 @@ class AlbumPlayerDlg(QDialog):
 		super(AlbumPlayerDlg, self).__init__()
 		self.main_window = main_window
 		
-		self.setWindowTitle('CD Cover Karussell')
-		self.resize(900, 420)
-		self.COVER_SIZE_ACTIVE = 220  # Das mittlere Album ist schön groß
-		self.COVER_SIZE_SMALL = 140   # Die seitlichen Alben sind kleiner
+		self.setWindowTitle('CD Alben & Karussell')
+		self.resize(900, 450) # Dimensionen leicht angepasst
+		self.COVER_SIZE_ACTIVE = 200
+		self.COVER_SIZE_SMALL = 130
+		self.GRID_COVER_SIZE = 140 # Feste Größe für die Grid-Ansicht
 		self.PADDING = 15
 		
+		# --- Hauptlayout ---
 		self.main_layout = QVBoxLayout(self)
 		
-		# Suchmaske
+		# --- 1. Steuerungszeile oben (Suche + Ansichts-Umschalter) ---
+		self.top_bar_layout = QHBoxLayout()
+		
 		self.search_le = QLineEdit(self)
 		self.search_le.setPlaceholderText("Nach Künstler, Album oder Genre filtern...")
 		self.search_le.setStyleSheet("QLineEdit { padding: 8px; font-size: 14px; border-radius: 4px; }")
 		self.search_le.textChanged.connect(self.on_search_changed)
-		self.main_layout.addWidget(self.search_le)
+		self.top_bar_layout.addWidget(self.search_le)
 		
-		# Scroll-Bereich
-		self.scroll = QScrollArea(self)
-		self.scroll.setWidgetResizable(True)
-		self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-		self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+		# Der Umschalt-Button
+		self.view_toggle_btn = QPushButton("≡ Grid-Ansicht", self)
+		self.view_toggle_btn.setStyleSheet("QPushButton { padding: 8px 12px; font-weight: bold; }")
+		self.view_toggle_btn.clicked.connect(self.toggle_view)
+		self.top_bar_layout.addWidget(self.view_toggle_btn)
 		
-		# WICHTIG: Wir fangen das Scroll-Ereignis ab, um den Skalierungs-Effekt live zu berechnen
-		self.scroll.horizontalScrollBar().valueChanged.connect(self.update_carousel_effects)
+		self.main_layout.addLayout(self.top_bar_layout)
 		
-		self.content_widget = QWidget()
-		self.hbox_layout = QHBoxLayout(self.content_widget)
-		self.hbox_layout.setAlignment(Qt.AlignCenter)
-		# Wir fügen links und rechts "Spacer" (Freiraum) hinzu, damit das erste und letzte Album in der Mitte stehen können
-		self.hbox_layout.addStretch(1)
+		# --- 2. Das QStackedWidget als Container für beide Ansichten ---
+		self.stacked_widget = QStackedWidget(self)
+		self.main_layout.addWidget(self.stacked_widget)
 		
-		self.scroll.setWidget(self.content_widget)
-		self.main_layout.addWidget(self.scroll)
-
+		# --- ANSICHT 1: Das Karussell (Index 0) ---
+		self.carousel_scroll = QScrollArea(self)
+		self.carousel_scroll.setWidgetResizable(True)
+		self.carousel_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+		self.carousel_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+		self.carousel_scroll.horizontalScrollBar().valueChanged.connect(self.update_carousel_effects)
+		
+		self.carousel_content = QWidget()
+		self.carousel_layout = QHBoxLayout(self.carousel_content)
+		self.carousel_layout.setAlignment(Qt.AlignCenter)
+		self.carousel_layout.addStretch(1) # Rechter Spacer für Zentrierung
+		
+		self.carousel_scroll.setWidget(self.carousel_content)
+		self.stacked_widget.addWidget(self.carousel_scroll) # Hinzufügen zum Stack
+		
+		# --- ANSICHT 2: Das klassische Grid (Index 1) ---
+		self.grid_scroll = QScrollArea(self)
+		self.grid_scroll.setWidgetResizable(True)
+		self.grid_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+		self.grid_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+		
+		self.grid_content = QWidget()
+		self.grid_layout = QGridLayout(self.grid_content)
+		self.grid_layout.setSpacing(10)
+		
+		self.grid_scroll.setWidget(self.grid_content)
+		self.stacked_widget.addWidget(self.grid_scroll) # Hinzufügen zum Stack
+		
+		# Datenstrukturen
 		self.all_albums_data = []
 		self.load_data_from_db()
 		
-		# Nach dem Laden einmalig den Effekt berechnen
+		# Standardmäßig starten wir im Karussell-Modus
+		self.stacked_widget.setCurrentIndex(0)
 		self.update_carousel_effects()
 		
 	def load_data_from_db(self):
@@ -852,94 +881,141 @@ class AlbumPlayerDlg(QDialog):
 			im_path = row[3]
 			album_path = row[4]
 			
-			pb = QPushButton()
-			pb.setFixedSize(self.COVER_SIZE_ACTIVE, self.COVER_SIZE_ACTIVE)
-			
-			# Pixmap laden
+			# Wir erstellen für jedes Album ZWEI Buttons – einen fürs Karussell, einen fürs Grid
 			pixmap = QPixmap()
 			if os.path.exists(im_path):
 				pixmap.load(im_path)
 			
-			# Wir speichern uns das originale, unskalierte Pixmap im Objekt, 
-			# damit wir es beim Scrollen ohne Qualitätsverlust dynamisch verkleinern/vergrößern können
-			pb.original_pixmap = pixmap if not pixmap.isNull() else None
-			pb.fallback_text = f"{artist_name}\n\n{album_name}"
+			fallback_text = f"{artist_name}\n\n{album_name}"
+			click_callback = partial(self.on_album_button_clicked, album_name, artist_name, album_path)
 			
-			pb.clicked.connect(partial(self.on_album_button_clicked, album_name, artist_name, album_path))
+			# 1. Karussell-Button vorbereiten
+			pb_carousel = QPushButton()
+			pb_carousel.setFixedSize(self.COVER_SIZE_ACTIVE, self.COVER_SIZE_ACTIVE)
+			pb_carousel.original_pixmap = pixmap if not pixmap.isNull() else None
+			pb_carousel.fallback_text = fallback_text
+			pb_carousel.clicked.connect(click_callback)
 			
+			# 2. Grid-Button vorbereiten (bisheriger Ansatz)
+			pb_grid = QPushButton()
+			pb_grid.setFixedSize(self.GRID_COVER_SIZE, self.GRID_COVER_SIZE)
+			if not pixmap.isNull():
+				scaled_grid = pixmap.scaled(self.GRID_COVER_SIZE, self.GRID_COVER_SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+				pb_grid.setIcon(QIcon(scaled_grid))
+				pb_grid.setIconSize(scaled_grid.rect().size())
+				pb_grid.setStyleSheet("QPushButton { border: 1px solid #555; background: #000; } QPushButton:hover { border-color: #fff; }")
+			else:
+				pb_grid.setText(fallback_text)
+				pb_grid.setStyleSheet("QPushButton { background-color: #333; color: white; font-size: 10px; }")
+			pb_grid.clicked.connect(click_callback)
+			
+			# In zentraler Liste erfassen
 			self.all_albums_data.append({
 				'artist': artist_name,
 				'album': album_name,
 				'genre': genre_name,
 				'path': album_path,
-				'widget': pb
+				'widget_carousel': pb_carousel,
+				'widget_grid': pb_grid
 			})
 			
-			# Vor dem letzten Stretch einfügen
-			self.hbox_layout.insertWidget(self.hbox_layout.count() - 1, pb)
+		# Initiales Rendern beider Ansichten
+		self.render_views()
+
+	def render_views(self):
+		"""Baut das HTML/Widget-Layout für beide Ansichten basierend auf den gefilterten Daten auf."""
+		# 1. Layouts leeren (Spacer und Widgets entfernen)
+		while self.carousel_layout.count() > 1: # Behalte den letzten Stretch
+			widget = self.carousel_layout.takeAt(0).widget()
+			if widget: widget.setParent(None)
+			
+		while self.grid_layout.count() > 0:
+			widget = self.grid_layout.takeAt(0).widget()
+			if widget: widget.setParent(None)
+			
+		# 2. Widgets neu einfügen (nur sichtbare Treffer)
+		grid_column = 0
+		grid_row = 0
+		max_columns = 5 # Wie viele Alben nebeneinander im Grid?
+		
+		search_term = self.search_le.text().lower().strip()
+		
+		for album in self.all_albums_data:
+			# Filter-Logik
+			match = (search_term in album['artist'].lower() or 
+					 search_term in album['album'].lower() or 
+					 search_term in album['genre'].lower())
+			
+			if match:
+				# Ins Karussell einfügen
+				self.carousel_layout.insertWidget(self.carousel_layout.count() - 1, album['widget_carousel'])
+				album['widget_carousel'].show()
+				
+				# Ins Grid einfügen
+				self.grid_layout.addWidget(album['widget_grid'], grid_row, grid_column)
+				album['widget_grid'].show()
+				
+				grid_column += 1
+				if grid_column >= max_columns:
+					grid_column = 0
+					grid_row += 1
+			else:
+				album['widget_carousel'].hide()
+				album['widget_grid'].hide()
+				
+		self.update_carousel_effects()
+
+	def toggle_view(self):
+		"""Wechselt zwischen Karussell (0) und Grid (1) hin und her."""
+		if self.stacked_widget.currentIndex() == 0:
+			self.stacked_widget.setCurrentIndex(1)
+			self.view_toggle_btn.setText("🎠 Karussell-Ansicht")
+		else:
+			self.stacked_widget.setCurrentIndex(0)
+			self.view_toggle_btn.setText("≡ Grid-Ansicht")
+			self.update_carousel_effects() # Effekte neu berechnen beim Zurückwechseln
 
 	def update_carousel_effects(self):
-		"""Berechnet basierend auf der Scroll-Position, welche Cover groß und welche klein gezeichnet werden."""
-		# Mittelpunkt des sichtbaren Scroll-Fensters berechnen
-		view_width = self.scroll.viewport().width()
+		"""Berechnet Karussell-Effekte (nur aktiv im Karussell-Modus)."""
+		if self.stacked_widget.currentIndex() != 0:
+			return
+			
+		view_width = self.carousel_scroll.viewport().width()
 		center_x = view_width / 2
 		
 		for album in self.all_albums_data:
-			widget = album['widget']
-			if not widget.isVisible():
+			widget = album['widget_carousel']
+			if not widget.isVisible() or widget.parent() is None:
 				continue
 				
-			# Position des Buttons relativ zum sichtbaren Fenster bestimmen
-			widget_pos = widget.mapTo(self.scroll.viewport(), QPoint(0, 0))
+			widget_pos = widget.mapTo(self.carousel_scroll.viewport(), QPoint(0, 0))
 			widget_center_x = widget_pos.x() + (widget.width() / 2)
 			
-			# Abstand zur Mitte berechnen
 			distance = abs(center_x - widget_center_x)
-			
-			# Schwellenwert: Innerhalb von 150 Pixeln zur Mitte wird das Cover groß, außerhalb wird es kleiner
 			max_distance = 250.0
-			factor = max(0.0, min(1.0, distance / max_distance)) # Wert zwischen 0 (genau Mitte) und 1 (weit weg)
+			factor = max(0.0, min(1.0, distance / max_distance))
 			
-			# Interpolation der Größe zwischen ACTIVE und SMALL
 			current_size = int(self.COVER_SIZE_ACTIVE - (factor * (self.COVER_SIZE_ACTIVE - self.COVER_SIZE_SMALL)))
 			widget.setFixedSize(current_size, current_size)
 			
-			# Icon neu skalieren basierend auf der aktuellen Größe
 			if widget.original_pixmap:
 				scaled_pixmap = widget.original_pixmap.scaled(current_size - 10, current_size - 10, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 				widget.setIcon(QIcon(scaled_pixmap))
 				widget.setIconSize(scaled_pixmap.rect().size())
 				
-				# Stylesheet anpassen: Aktives Cover kriegt einen hellen Rahmen, inaktive verblassen leicht
 				if factor < 0.3:
-					widget.setStyleSheet(f"QPushButton {{ border: 3px solid #ffffff; background: #000; padding: 0px; }}")
+					widget.setStyleSheet("QPushButton { border: 3px solid #ffffff; background: #000; }")
 				else:
-					widget.setStyleSheet(f"QPushButton {{ border: 2px solid #444444; background: #000; padding: 0px; }}")
+					widget.setStyleSheet("QPushButton { border: 2px solid #444444; background: #000; }")
 			else:
-				# Fallback-Text-Button stylen
-				widget.setText(widget.fallback_text if current_size > 150 else "...")
-				widget.setStyleSheet(f"QPushButton {{ background-color: #222; color: #888; font-size: {max(8, int(11 - factor*3))}px; }}")
+				widget.setText(widget.fallback_text if current_size > 140 else "...")
+				widget.setStyleSheet(f"QPushButton { background-color: #222; color: #888; font-size: {max(8, int(10 - factor*2))}px; }")
 
 	def on_search_changed(self, text):
-		search_term = text.lower().strip()
-		
-		for album in self.all_albums_data:
-			self.hbox_layout.removeWidget(album['widget'])
-			album['widget'].setParent(None)
-			
-		for album in self.all_albums_data:
-			if (search_term in album['artist'].lower() or 
-				search_term in album['album'].lower() or 
-				search_term in album['genre'].lower()):
-				
-				self.hbox_layout.insertWidget(self.hbox_layout.count() - 1, album['widget'])
-				album['widget'].show()
-				
-		# Nach dem Filtern den Effekt für die verbliebenen Cover neu berechnen
-		self.update_carousel_effects()
+		# Beim Tippen bauen wir einfach beide Ansichten gefiltert neu auf
+		self.render_views()
 
 	def resizeEvent(self, event):
-		"""Wird aufgerufen, wenn der User das Fenster groß/klein zieht – stellt sicher, dass die Mitte stimmt."""
 		super(AlbumPlayerDlg, self).resizeEvent(event)
 		self.update_carousel_effects()
 
@@ -953,56 +1029,6 @@ class AlbumPlayerDlg(QDialog):
 		self.main_window.player.setPlaylist(self.main_window.playlist)
 		self.main_window.player.play()
 		self.accept()
-
-	def rearrange_buttons(self):
-		"""Berechnet die Spaltenanzahl basierend auf der aktuellen Breite neu."""
-		if not self.pbArray:
-			return
-
-		# Verfügbare Breite des Scroll-Inhalts abrufen (Abzug für die Scrollbar einplanen)
-		available_width = self.scroll.viewport().width()
-		
-		# Berechnen, wie viele Buttons inklusive Puffer nebeneinander passen (mindestens 1)
-		buttons_per_row = max(1, available_width // (self.COVER_SIZE_ABP + self.PADDING))
-
-		# Alle Buttons aus dem Grid entfernen (ohne sie zu löschen)
-		for i in reversed(range(self.grid.count())): 
-			widget = self.grid.itemAt(i).widget()
-			if widget is not None:
-				self.grid.removeWidget(widget)
-
-		# Buttons basierend auf der neuen Spaltenanzahl im Raster verteilen
-		cur_x = 0
-		cur_y = 0
-		for pb in self.pbArray:
-			self.grid.addWidget(pb, cur_x, cur_y)
-			cur_y += 1
-			if cur_y >= buttons_per_row:
-				cur_y = 0
-				cur_x += 1
-				
-	def on_album_button_clicked(self, album_name, artist_name, album_path):
-		# print(f"Album clicked: {album_name} by {artist_name}")
-		print('<on_album_button_clicked>Now playing album: ' + album_path)
-		
-		# TODO:
-		# create playlist
-		plgen = PlaylistGenerator()
-		playlistfile = artist_name + '_' + album_name + '.m3u'
-		plgen.genCompletePlaylistFromDirectory(album_path, playlistfile, False)
-
-		# Set the playlist in MainWindow
-		self.main_window.playlist = Utils.load_playlist_from_file(playlistfile)
-		self.main_window.player.setPlaylist(self.main_window.playlist)
-		self.main_window.player.play()
-
-	# def load_playlist_from_file(self, playlistfile, playlist):
-		# playlist.clear()
-		# with open(playlistfile, 'r') as fin:
-			# lines = fin.readlines()
-			# fin.close()
-			# for line in lines:
-				# playlist.addMedia(QMediaContent(QUrl.fromLocalFile(line.strip())))
 
 class ExcelFilterHeader(QtWidgets.QHeaderView):
 	"""Erweiterter Tabellenkopf, der bei Klick das Excel-Filtermenü öffnet."""
