@@ -567,6 +567,11 @@ class MainWindow(QtWidgets.QDialog):
 			print('=============================================================')
 			print('[Updating DB] started')
 			
+		# Verbindung explizit VOR der Schleife öffnen und Transaktion starten ---
+		self.db.conn = sqlite3.connect(self.db.dbname)
+		self.db.cursor = self.db.conn.cursor()
+		self.db.cursor.execute("BEGIN TRANSACTION;") # Beschleunigt SQLite massiv
+
 		# Verwende enumerate, um den aktuellen Index (startend bei 1) mitzuzählen
 		for idx, curfile in enumerate(files, 1):
 			# Prozentwert berechnen
@@ -586,6 +591,8 @@ class MainWindow(QtWidgets.QDialog):
 			
 			m = MP3Data()
 			arrMp3Data = m.getTagsFromFile(curfile)
+			
+			# Trägt die Zeile in den Speicher ein, schreibt aber noch nicht auf die Disk
 			self.db.addline_tablesongs(arrMp3Data)
 			
 			# --- Validierung der Tags laut Vorgabe ---
@@ -651,7 +658,13 @@ class MainWindow(QtWidgets.QDialog):
 					imagename = m.getImage(curfile)
 				self.db.addline_tablealbums(arrMp3Data, imagename)
 				
-		# Fehlerprotokoll in Datei schreiben
+		# --- NEU: Nach der Schleife ALLES auf einmal speichern und Verbindung schließen ---
+		self.db.conn.commit()
+		self.db.conn.close()
+		self.db.conn = None # Zurücksetzen
+		# ---------------------------------------------------------------------------------
+
+		# Fehlerprotokoll in Datei schreiben (Ihr bestehender Code)
 		try:
 			with open("MusicErrors.txt", "w", encoding="utf-8") as error_file:
 				if error_log:
@@ -1274,24 +1287,32 @@ class DB:
 		self.conn.close()
 		self.sqltext_dbg = ''
 		
-	def exec_sql(self, cmd, bCloseConn=True, bExitOnError = True, bSQLTest = False):
+	def exec_sql(self, cmd, bCloseConn=True, bExitOnError = True, bSQLTest = False, bCommit=True):
 		ret_text = ''
 		try:
-			# Verbindung zur Datenbank herstellen
-			self.conn = sqlite3.connect(self.dbname)
-			# Cursor-Objekt (zum Zugriff auf die Datenbank)
-			self.cursor = self.conn.cursor()
+			# Nur verbinden, wenn nicht bereits eine Verbindung offen ist
+			if not hasattr(self, 'conn') or self.conn is None or bCloseConn:
+				self.conn = sqlite3.connect(self.dbname)
+				# Cursor-Objekt (zum Zugriff auf die Datenbank)
+				self.cursor = self.conn.cursor()
+				
 			if bDebugSQL:
 				print('<SQL>' + cmd)
 			self.sqltext_dbg += cmd + '\n'
 			self.cursor.execute(cmd)
-			self.conn.commit()
+			
+			# Commit nur ausführen, wenn gewünscht (wichtig für Transaktionen!)
+			if bCommit:
+				self.conn.commit()
+				
 			if cmd.upper().startswith('SELECT') and bSQLTest:
 				rows = self.cursor.fetchall()
 				for r in rows:
 					ret_text += str(r) + '\n'
+					
 			if bCloseConn:
 				self.conn.close()
+				self.conn = None
 		except sqlite3.Error as e:
 			ret_text += str(e)
 			print(e)
@@ -1360,7 +1381,8 @@ class DB:
 		sql += str(data[12])  + ', '   #rating
 		sql += '"' + data[13] + '"); ' #fullpath
 
-		self.exec_sql(sql)
+		# Verbindung offen lassen und nicht committen
+		self.exec_sql(sql, bCloseConn=False, bCommit=False)
 		
 	def addline_tablealbums(self, data, coverpath):
 		sql  = 'INSERT INTO Albums VALUES('
@@ -1377,7 +1399,8 @@ class DB:
 		sql += '"' + os.path.dirname(data[13]) + '"); ' #fullpath
 		# TODO: path to multi-CDs not possible in this way for AlbumButtonPlayer
 
-		self.exec_sql(sql)
+		# Verbindung offen lassen und nicht committen
+		self.exec_sql(sql, bCloseConn=False, bCommit=False)
 		
 	def getTable(self, table):
 		rows = []
