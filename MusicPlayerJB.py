@@ -71,6 +71,49 @@ class PlaylistGenerator:
 			fout.write(text)
 			fout.close()
 			
+	def genPlaylistFromDatabase(self, directory, outputfile, bRandom, db_path):
+		"""
+		Generiert eine Playlist basierend auf den in der Datenbank (Songs-Tabelle)
+		gespeicherten Pfaden, gefiltert nach einem bestimmten Basis-Verzeichnis.
+		"""
+		# SQL-Query: Holt alle FULLPATHs aus Songs, die im gesuchten Verzeichnis liegen
+		# Wir nutzen 'LIKE', um Unterverzeichnisse analog zu glob recursive zu erfassen
+		cmd = "SELECT FULLPATH FROM Songs WHERE FULLPATH LIKE ? ORDER BY ARTIST ASC, TITLE ASC;"
+		files = []
+		
+		try:
+			conn = sqlite3.connect(db_path)
+			cursor = conn.cursor()
+			# Das % Zeichen dient als Wildcard für alle folgenden Zeichen (Unterordner/Dateien)
+			cursor.execute(cmd, (directory + '%',))
+			rows = cursor.fetchall()
+			conn.close()
+			
+			# Tupel-Ergebnisse in eine flache Liste von Pfaden umwandeln
+			files = [row[0] for row in rows]
+		except sqlite3.Error as e:
+			print(f"<genPlaylistFromDatabase> SQL-Fehler: {e}")
+			return
+
+		if bDebug:
+			print('<genPlaylistFromDatabase><directory>' + str(directory))
+			print('<genPlaylistFromDatabase><db_path>' + str(db_path))
+			print('<genPlaylistFromDatabase><files_count>' + str(len(files)))
+		
+		# Falls bRandom aktiv ist, wird die Liste gemischt
+		if bRandom:
+			random.shuffle(files)
+			
+		text = ''
+		for f in files:
+			text += f + '\n'
+			
+		with open(outputfile, 'w', encoding='utf-8') as fout:
+			fout.write(text)
+			
+		if bDebug:
+			print(f'<genPlaylistFromDatabase> Playlist erfolgreich geschrieben: {outputfile}')
+			
 class MP3Data:
 	def __init__(self):
 		self.mpgType = ''
@@ -453,7 +496,11 @@ class MainWindow(QtWidgets.QDialog):
 		### old implementation with dialog -> now changed to read from config
 		# d = QFileDialog.getExistingDirectory(self, 'select Music Directory', '.', QFileDialog.Option.ShowDirsOnly)
 		# plgen.genCompletePlaylistFromDirectory(d, self.randomplaylist, True)
-		plgen.genCompletePlaylistFromDirectory(self.sounddir, self.randomplaylist, True)
+
+		#plgen.genCompletePlaylistFromDirectory(self.sounddir, self.randomplaylist, True)
+
+		plgen.genPlaylistFromDatabase(self.sounddir, self.randomplaylist, True, self.db.dbname)
+
 		self.playlist.setCurrentIndex(0)
 		self.savePlaylistState(self.playlist, self.randomplaylist)
 		self.bPlaylistChanged = True
@@ -1036,7 +1083,9 @@ class AlbumPlayerDlg(QDialog):
 		print('<on_album_button_clicked> Spiele Album: ' + album_path)
 		plgen = PlaylistGenerator()
 		playlistfile = artist_name + '_' + album_name + '.m3u'
-		plgen.genCompletePlaylistFromDirectory(album_path, playlistfile, False)
+
+		# plgen.genCompletePlaylistFromDirectory(album_path, playlistfile, False)
+		plgen.genPlaylistFromDatabase(album_path, playlistfile, False, self.main_window.db.dbname)
 
 		self.main_window.playlist = Utils.load_playlist_from_file(playlistfile)
 		self.main_window.player.setPlaylist(self.main_window.playlist)
