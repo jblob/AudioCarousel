@@ -405,10 +405,33 @@ class MainWindow(QtWidgets.QDialog):
 		self.comboBox_selectconfig.setCurrentText(startconfig)
 		
 	def slot_modechanged(self, obj, checked):
+		# 'checked' ist True für den neu aktivierten Button
+		if not checked:
+			return
+
 		self.player_mode = obj.text()
-		# if bDebug:
-			# print('<slot_modechanged>setting player mode to ' + self.player_mode)
-		# pass
+
+		if self.player_mode == 'RandomPlayer':
+			# 1. Aktuelles Album / Player stoppen
+			self.player.stop()
+
+			# 2. Random-Playlist neu aus Datei laden & Signal-Verbindung erhalten
+			self.playlist.clear()
+			random_pl = Utils.load_playlist_from_file(self.randomplaylist)
+			for i in range(random_pl.mediaCount()):
+				self.playlist.addMedia(random_pl.media(i))
+
+			# 3. Sicherstellen, dass die Playlist am Player zugewiesen ist
+			if self.player.playlist() != self.playlist:
+				self.player.setPlaylist(self.playlist)
+
+			# 4. Gespeicherten Index abrufen und starten
+			saved_idx = self.getPlaylistSavedState(self.randomplaylist)
+			if saved_idx >= self.playlist.mediaCount() or saved_idx < 0:
+				saved_idx = 0
+
+			self.playlist.setCurrentIndex(saved_idx)
+			self.player.play()
 		
 	def updateListViews(self):
 		# fill listviews from DB
