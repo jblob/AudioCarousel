@@ -13,9 +13,9 @@ import sqlite3
 # PyQt imports
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtWidgets import (
-    QAction, QApplication, QLabel, QMainWindow, QMenu, QDialog, QFileDialog,
-    QStatusBar, QPushButton, QGridLayout, QScrollArea, QWidget, QVBoxLayout,
-    QDialogButtonBox, QMessageBox, QTableView, QTabWidget, 
+	QAction, QApplication, QLabel, QMainWindow, QMenu, QDialog, QFileDialog,
+	QStatusBar, QPushButton, QGridLayout, QScrollArea, QWidget, QVBoxLayout,
+	QDialogButtonBox, QMessageBox, QTableView, QTabWidget, 
 	QComboBox, QWidgetAction, QCheckBox, QListWidget, QListWidgetItem, QHBoxLayout, QLineEdit
 )
 from PyQt5.QtCore import Qt, QUrl, QSortFilterProxyModel, QPoint
@@ -352,6 +352,12 @@ class MainWindow(QtWidgets.QDialog):
 
 		self.player = QMediaPlayer()
 		self.playlist = QMediaPlaylist()
+		self.player.setVideoOutput(self.widget_videooutput)
+		self.stackedWidget.setCurrentIndex(0)
+		if bDebug:
+			print('<MainWindow><Init>self.stackedWidget.setCurrentIndex(0)')
+		
+
 		pyqtRemoveInputHook() # otherwise no debugging with pdb possible :/
 #		self.randomplayliststate = self.getPlaylistSavedState(self.randomplaylist)
 		self.label_cover.setStyleSheet('background-color: white;')
@@ -375,6 +381,7 @@ class MainWindow(QtWidgets.QDialog):
 
 		self.player.metaDataChanged.connect(self.slotMetaDataChanged)
 		self.playlist.currentIndexChanged.connect(self.slotIndexChanged)
+		self.playlist.currentMediaChanged.connect(self.slotMetaDataChanged)
 		
 		### TODO: this is in test only
 		# self.player.setMedia(QMediaContent(QUrl.fromLocalFile('e:/000_2024/at_Urlaub/dSPACE_LearningConnectionRecording_MBD_1280x720_20210211-2_EN.mp4')))
@@ -565,34 +572,61 @@ class MainWindow(QtWidgets.QDialog):
 		return val
 
 	def slotMetaDataChanged(self):
-		if self.player.isMetaDataAvailable():
-			# data = self.player.metaData(QMediaMetaData.Title)
-			mp3data = MP3Data().data(self.player)
-			if bDebug:
-				print('<slotMetaDataChanged>' + str(mp3data))
-			self.label_artist_2.setText(mp3data['artist'])
-			self.label_title_2.setText(mp3data['track'])
-			self.label_album_2.setText(mp3data['album'])
-			self.label_genre_2.setText(str(mp3data['genre'])) # genre is a list, TODO: better handling to display it ? genre[0] ?
-			self.label_year_2.setText(str(mp3data['release']))
+		
+		if bDebug:
+			print('<slotMetaDataChanged>slotMetaDataChanged called')
 
-			if mp3data['coverart_th'] and mp3data['coverart_th'] != 'Unknown':
-				pixmap = QPixmap(mp3data['coverart_th'])
-				pixmap = pixmap.scaled(self.COVER_SIZE, self.COVER_SIZE)
-				self.label_cover.setPixmap(pixmap)
-			else:
-				self.label_cover.clear() ### TODO: standard pixmap
-			self.statusBar.showMessage('playing: ' + mp3data['track'] + ' - ' + mp3data['artist'])
-		else:
-			self.label_artist_2.setText('<unknown>')
-			self.label_title_2.setText('<unknown>')
-			self.label_album_2.setText('<unknown>')
-			self.label_genre_2.setText('<unknown>')
-			self.label_year_2.setText('<unknown>')
+		current_media = self.player.currentMedia()
+		current_file = current_media.canonicalUrl().toLocalFile()
+		
+		if not current_file or not os.path.exists(current_file):
+			return
 
-			# self.label_cover.setPixmap(pixmap) ### TODO: standard pixmap
-		self.savePlaylistState(self.playlist, self.randomplaylist)
+		# 1. MP4 / Video-Handling
+		if current_file.lower().endswith('.mp4'):
+			self.stackedWidget.setCurrentIndex(1)
+			return
+
+		# 2. Standard MP3 Handling
+		self.stackedWidget.setCurrentIndex(0)
+		
+		try:
+			# Metadaten direkt & zuverlässig per Mutagen laden
+			m = MP3Data()
+			tags = m.getTagsFromFile(current_file)
 			
+			# Labels setzen
+			self.label_artist_2.setText(m.artist or '<unknown>')
+			self.label_title_2.setText(m.title or '<unknown>')
+			self.label_album_2.setText(m.album or '<unknown>')
+			self.label_genre_2.setText(str(m.genre) or '<unknown>')
+			self.label_year_2.setText(str(m.year) or '<unknown>')
+			self.statusBar.showMessage(f"playing: {m.title} - {m.artist}")
+
+			# Embedded Cover per Mutagen auslesen
+			audio = MP3(current_file, ID3=ID3)
+			cover_found = False
+			
+			if audio.tags is not None:
+				for tag in audio.tags.values():
+					if isinstance(tag, APIC):  # Embedded Picture
+						pixmap = QPixmap()
+						if pixmap.loadFromData(tag.data):
+							pixmap = pixmap.scaled(self.COVER_SIZE, self.COVER_SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+							self.label_cover.setPixmap(pixmap)
+							cover_found = True
+							break
+
+			if not cover_found:
+				self.label_cover.clear()
+
+		except Exception as e:
+			print(f"<E> Fehler beim Laden des Covers: {e}")
+			self.label_cover.clear()
+			
+		self.savePlaylistState(self.playlist, self.randomplaylist)
+
+	
 	def slotIndexChanged(self):
 		idx = self.playlist.currentIndex()
 		if idx >= 0:
@@ -742,7 +776,7 @@ class MainWindow(QtWidgets.QDialog):
 		headers2 = ['Artist', 'AlbumArtist', 'Album', 'Genre', 'CoverPath', 'FullPath']
 
 		# Create and show the TabWindow
-		self.tab_window = TabWindow(headers1, data1, headers2, data2)
+		self.tab_window = TabWindow(headers1, data1, headers2, data2, self.db.dbname)
 		self.tab_window.show()
 
 	def pushButton_testsqlquery_run(self):
@@ -1087,18 +1121,28 @@ class AlbumPlayerDlg(QDialog):
 		# plgen.genCompletePlaylistFromDirectory(album_path, playlistfile, False)
 		plgen.genPlaylistFromDatabase(album_path, playlistfile, False, self.main_window.db.dbname)
 
-		self.main_window.playlist = Utils.load_playlist_from_file(playlistfile)
-		self.main_window.player.setPlaylist(self.main_window.playlist)
+		new_playlist = Utils.load_playlist_from_file(playlistfile)
+		self.main_window.playlist.clear()
+		
+		for i in range(new_playlist.mediaCount()):
+			self.main_window.playlist.addMedia(new_playlist.media(i))
+			
+		if self.main_window.player.playlist() != self.main_window.playlist:
+			self.main_window.player.setPlaylist(self.main_window.playlist)
+			
+		self.main_window.playlist.setCurrentIndex(0)
+			
 		self.main_window.player.play()
 		self.accept()
 
 class ExcelFilterHeader(QtWidgets.QHeaderView):
 	"""Erweiterter Tabellenkopf, der bei Klick das Excel-Filtermenü öffnet."""
-	def __init__(self, orientation, parent=None):
+	def __init__(self, orientation, dbname, parent=None):
 		super().__init__(orientation, parent)
 		self.setSectionsClickable(True)
 		self.sectionClicked.connect(self.show_filter_menu)
 		self.active_filters = {} # Speichert die ausgewählten Werte pro Spalte: {col_idx: {set_of_allowed_values}}
+		self.dbname = dbname
 
 	def show_filter_menu(self, logical_index):
 		# Das Proxy-Modell und das originale Modell holen
@@ -1120,7 +1164,7 @@ class ExcelFilterHeader(QtWidgets.QHeaderView):
 		try:
 			import sqlite3
 			# Verbindung zur DB des Hauptfensters aufbauen
-			conn = sqlite3.connect(self.parent().parent().main_window.db.dbname)
+			conn = sqlite3.connect(self.dbname)
 			cursor = conn.cursor()
 			
 			# DISTINCT holt jeden Wert nur ein einziges Mal. ORDER BY sortiert es direkt.
@@ -1169,6 +1213,7 @@ class ExcelFilterHeader(QtWidgets.QHeaderView):
 		list_widget.setItemWidget(item_all, cb_all)
 
 		# Die einzelnen Werte als Checkboxen hinzufügen
+		# NEU: Wir speichern hier direkt das Tupel (Checkbox, Item) für den Blitz-Zugriff
 		checkbox_map = {}
 		for val in sorted_values:
 			item = QListWidgetItem(list_widget)
@@ -1181,23 +1226,26 @@ class ExcelFilterHeader(QtWidgets.QHeaderView):
 				cb.setChecked(True)
 				
 			list_widget.setItemWidget(item, cb)
-			checkbox_map[val] = cb
+			checkbox_map[val] = (cb, item)  # <-- Hier das Item mitspeichern!
 
-		# Suchfeld-Logik: Liste beim Tippen live filtern
+		# Suchfeld-Logik: Liste beim Tippen live filtern (Jetzt in O(N) statt O(N²))
 		def filter_list_items(text):
-			for val, cb in checkbox_map.items():
-				# Suchtreffer anzeigen, den Rest verstecken
-				for idx in range(list_widget.count()):
-					it = list_widget.item(idx)
-					w = list_widget.itemWidget(it)
-					if w != cb_all:
-						it.setHidden(text.lower() not in w.text().lower())
+			text_lower = text.lower().strip()
+			
+			# Blockiert GUI-Updates während des Filterns für zusätzliche Performance
+			list_widget.setUpdatesEnabled(False)
+			try:
+				for val, (cb, item) in checkbox_map.items():
+					# Direktes Verstecken des Listenelements ohne verschachtelte Schleife
+					item.setHidden(text_lower not in val.lower())
+			finally:
+				list_widget.setUpdatesEnabled(True)
 
 		search_le.textChanged.connect(filter_list_items)
 
 		# "Alle"-Checkbox steuert alle Unter-Checkboxen
 		def toggle_all(state):
-			for cb in checkbox_map.values():
+			for cb, item in checkbox_map.values():
 				cb.setChecked(state == Qt.Checked)
 		cb_all.stateChanged.connect(toggle_all)
 
@@ -1243,9 +1291,12 @@ class ExcelFilterHeader(QtWidgets.QHeaderView):
 		elif self.menu_result == "ok":
 			# Erlaubte Werte aus den Checkboxen sammeln
 			allowed = set()
-			for val, cb in checkbox_map.items():
+			for val, (cb, item) in checkbox_map.items():
 				if cb.isChecked():
 					allowed.add(val)
+
+			# --- KORREKTUR: Layout-Änderung signalisieren ---
+			proxy_model.layoutAboutToBeChanged.emit()
 
 			if len(allowed) == len(sorted_values):
 				# Alles ausgewählt -> Filter für diese Spalte entfernen
@@ -1254,9 +1305,12 @@ class ExcelFilterHeader(QtWidgets.QHeaderView):
 				# Filter setzen
 				self.active_filters[logical_index] = allowed
 
-			# Zwingt das Proxy-Modell, die Tabelle JETZT live neu zu filtern
+			# Zwingt das Proxy-Modell, den Filter neu auszuwerten
 			proxy_model.invalidateFilter()
-
+			
+			# --- KORREKTUR: Ansicht zum Refresh zwingen ---
+			proxy_model.layoutChanged.emit()
+			
 class CustomFilterProxyModel(QSortFilterProxyModel):
 	"""Erweitertes Proxy-Modell, das komplexe Multi-Checkbox-Filter auswertet."""
 	def __init__(self, parent=None):
@@ -1283,7 +1337,7 @@ class CustomFilterProxyModel(QSortFilterProxyModel):
 		return True
 
 class TabWindow(QMainWindow):
-	def __init__(self, headers1, data1, headers2, data2):
+	def __init__(self, headers1, data1, headers2, data2, dbname):
 		super(TabWindow, self).__init__()
 		self.setWindowTitle('My music Collection (Excel Autofilter Mode)')
 		self.resize(1000, 700)
@@ -1299,7 +1353,7 @@ class TabWindow(QMainWindow):
 		self.proxy_model1.setSourceModel(model1)
 
 		table_view1 = QTableView()
-		header1 = ExcelFilterHeader(Qt.Horizontal, table_view1)
+		header1 = ExcelFilterHeader(Qt.Horizontal, dbname, table_view1)
 		table_view1.setHorizontalHeader(header1) # Setze den custom Excel-Header!
 		header1.header_view = header1            # Zirkelbezug herstellen
 		self.proxy_model1.header_view = header1  # Verbindung zum FilterModell herstellen
@@ -1315,7 +1369,7 @@ class TabWindow(QMainWindow):
 		self.proxy_model2.setSourceModel(model2)
 
 		table_view2 = QTableView()
-		header2 = ExcelFilterHeader(Qt.Horizontal, table_view2)
+		header2 = ExcelFilterHeader(Qt.Horizontal, dbname, table_view2)
 		table_view2.setHorizontalHeader(header2)
 		self.proxy_model2.header_view = header2
 		
@@ -1413,66 +1467,75 @@ class DB:
 		
 	# def addline_tablesongs(self, title, artist, album, genre, duration, bCoverAvailable, tracknumber, year, channels, bitrate_mode, bitrate, rating, fullpath)
 	def addline_tablesongs(self, data):
-		sql  = 'INSERT INTO Songs VALUES(' ###+ data 
-		# sql += '0, '  ### primary key !!!
-		sql += '"' + data[0] + '", '   #title
-		sql += '"' + data[1] + '", '   #artist
-		sql += '"' + data[2] + '", '   #albumartist
-		sql += '"' + data[3] + '", '   #album
-		sql += '"' + data[4] + '", '   #genre
-		sql += str(data[5])  + ', '    #duration
-		sql += str(data[6])  + ', '    #bCoverAvailable
-		sql += str(data[7])  + ', '    #tracknumber
-		sql += str(data[8])  + ', '    #year
-		sql += str(data[9])  + ', '    #channels
-		sql += '"' + str(data[10])  + '", '    #bitrate_mode
-		sql += str(data[11])  + ', '   #bitrate
-		sql += str(data[12])  + ', '   #rating
-		sql += '"' + data[13] + '"); ' #fullpath
-
-		# Verbindung offen lassen und nicht committen
-		self.exec_sql(sql, bCloseConn=False, bCommit=False)
+		sql = 'INSERT INTO Songs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);'
 		
+		# Hilfsfunktion, um Strings wie '12/01' oder korrupte Werte sicher in int zu wandeln
+		def safe_int(val):
+			try:
+				if isinstance(val, str) and '/' in val:
+					val = val.split('/')[0] # Schneidet alles nach dem / ab
+				return int(val)
+			except (ValueError, TypeError):
+				return 0 # Fallback, falls der Tag leer oder unlesbar ist
+
+		# Sichere Konvertierung der Felder 5, 6, 7, 9, 11 und 12
+		val_5  = safe_int(data[5])
+		val_6  = safe_int(data[6])
+		val_7  = safe_int(data[7])
+		val_9  = safe_int(data[9])
+		val_11 = safe_int(data[11])
+		val_12 = safe_int(data[12])
+
+		try:
+			self.cursor.execute(sql, (
+				data[0], data[1], data[2], data[3], data[4], 
+				val_5, val_6, val_7, str(data[8]), 
+				val_9, str(data[10]), val_11, val_12, data[13]
+			))
+		except sqlite3.Error as e:
+			print(f"Fehler bei Songs-Insert ({data[0]}): {e}")
+			
 	def addline_tablealbums(self, data, coverpath):
-		sql  = 'INSERT INTO Albums VALUES('
-		# sql += '0, '  ### primary key !!!
-		sql += '"' + data[1] + '", '   #artist
-		sql += '"' + data[2] + '", '   #albumartist
-		sql += '"' + data[3] + '", '   #album
-		sql += '"' + data[4] + '", '   #genre
-#		sql += str(data[5])  + ', '    #duration -> later
-#		sql += str(data[6])  + ', '    #bCoverAvailable -> later
-#		sql += str(data[8])  + ', '    #year -> later
-#		sql += str(bIsSampler)  + ', '    #bIsSampler -> later ### how to detect ? special directory ? Artist<->Album Artist ?
-		sql += '"' + coverpath + '", ' #path to coverart
-		sql += '"' + os.path.dirname(data[13]) + '"); ' #fullpath
-		# TODO: path to multi-CDs not possible in this way for AlbumButtonPlayer
-
-		# Verbindung offen lassen und nicht committen
-		self.exec_sql(sql, bCloseConn=False, bCommit=False)
+		# Verwende ? Platzhalter für alle 6 Felder
+		sql = 'INSERT INTO Albums VALUES(?, ?, ?, ?, ?, ?);'
 		
+		# data[13] ist der Fullpath der Spieldatei, os.path.dirname holt den Ordnerpfad
+		folder_path = os.path.dirname(data[13])
+		
+		try:
+			self.cursor.execute(sql, (
+				data[1],       # artist
+				data[2],       # albumartist
+				data[3],       # album
+				data[4],       # genre
+				coverpath,     # path to coverart
+				folder_path    # fullpath
+			))
+		except sqlite3.Error as e:
+			print(f"Fehler bei Album-Insert ({data[3]}): {e}")
+			
 	def getTable(self, table):
 		rows = []
 		
 		try:
 			# Abfrage je nach Tabelle anpassen, um die Sortierung zu erzwingen
 			if table.upper() == 'SONGS':
-				# Sortiert die Song-Tabelle zuerst nach ARTIST, dann nach TITLE
 				sql = 'SELECT * FROM Songs ORDER BY ARTIST ASC, TITLE ASC;'
 			elif table.upper() == 'ALBUMS':
-				# Sortiert die Album-Tabelle zuerst nach ARTIST, dann nach ALBUM
 				sql = 'SELECT * FROM Albums ORDER BY ARTIST ASC, ALBUM ASC;'
 			else:
-				# Fallback für eventuelle andere Tabellen
 				sql = 'SELECT * FROM ' + table + ';'
 
-			self.exec_sql(sql, False)
-
-			rows = self.cursor.fetchall()
-			self.conn.close()
-		except:
+			# --- ÄNDERUNG: Lokale Verbindung öffnen statt globaler Instanzvariablen ---
+			# Nutzt das 'with'-Statement von sqlite3, das die Verbindung garantiert schließt
+			with sqlite3.connect(self.dbname) as conn:
+				local_cursor = conn.cursor()
+				local_cursor.execute(sql)
+				rows = local_cursor.fetchall()
+				
+		except sqlite3.Error as e: # Besser als ein nacktes except, um echte SQL-Fehler zu sehen
 			if bDebug:
-				print('<getTable>Error: ' + table + 'not found')
+				print(f'<getTable> Error reading table {table}: {e}')
 		
 		return rows
 		
@@ -1575,11 +1638,14 @@ class Utils:
 	def load_playlist_from_file(playlistfile):
 		playlist = QMediaPlaylist()
 		# playlist.clear()
-		with open(playlistfile, 'r') as fin:
+		with open(playlistfile, 'r', encoding='utf-8') as fin:
 			lines = fin.readlines()
 			fin.close()
 			for line in lines:
-				playlist.addMedia(QMediaContent(QUrl.fromLocalFile(line.strip())))
+				path_str = line.strip()
+				if path_str:
+					abs_path = os.path.abspath(path_str)
+					playlist.addMedia(QMediaContent(QUrl.fromLocalFile(abs_path)))
 		return playlist
 
 if __name__ == '__main__':
