@@ -365,6 +365,22 @@ class MainWindow(QtWidgets.QDialog):
 		self.label_cover.setStyleSheet('background-color: white;')
 
 		# connect signals and slots
+		self.connectSignalsAndSlots()
+		
+		self.statusBar = QStatusBar()
+		self.verticalLayout_statusbar.addWidget(self.statusBar)
+		self.statusBar.showMessage('------------------------------------')
+		
+		self.updateListViews()
+		
+		# self.comboBox_selectconfig.currentIndexChanged.connect(self.comboBox_selectconfig_cfgchanged_i)
+		self.comboBox_selectconfig.currentTextChanged.connect(self.comboBox_selectconfig_cfgchanged_t)
+		
+		# fill listview from config file
+		self.comboBox_selectconfig.addItems(lConfigs)
+		self.comboBox_selectconfig.setCurrentText(startconfig)
+		
+	def connectSignalsAndSlots(self):
 		self.pushButton_randomplaylist_play.clicked.connect(self.pushButton_randomplaylist_play_run)
 		self.pushButton_genrandomplaylist.clicked.connect(self.pushButton_genrandomplaylist_run)
 		self.pushButton_randomplaylist_stop.clicked.connect(self.pushButton_randomplaylist_stop_run)
@@ -380,34 +396,11 @@ class MainWindow(QtWidgets.QDialog):
 		self.pushButton_config_deleteconfig.clicked.connect(self.pushButton_config_deleteconfig_run)
 		self.pushButton_config_setasdefault.clicked.connect(self.pushButton_config_setasdefault_run)
 		self.buttonGroup.buttonToggled.connect(self.slot_modechanged)
-
 		self.player.metaDataChanged.connect(self.slotMetaDataChanged)
+		self.player.error.connect(lambda err: print(f"<E> Player Error: {self.player.errorString()} (Code: {err})"))
 		self.playlist.currentIndexChanged.connect(self.slotIndexChanged)
 		self.playlist.currentMediaChanged.connect(self.slotMetaDataChanged)
-		
-		### TODO: this is in test only
-		# self.player.setMedia(QMediaContent(QUrl.fromLocalFile('e:/000_2024/at_Urlaub/dSPACE_LearningConnectionRecording_MBD_1280x720_20210211-2_EN.mp4')))
-#		self.player.setMedia(QMediaContent(QUrl.fromLocalFile('e:/at_home/3/Sound/_videos_unsorted/t_online_werbung.mp4')))
-#		self.player.setVideoOutput(self.widget_videooutput)
-		# connect(mplayer, &QMediaPlayer::stateChanged, [vw](QMediaPlayer::State state){
-							# if (state == QMediaPlayer::StoppedState)
-								# vw->update(); });
-		# vw.show();
-		self.statusBar = QStatusBar()
-		self.verticalLayout_statusbar.addWidget(self.statusBar)
-		self.statusBar.showMessage('------------------------------------')
-		
-		self.updateListViews()
-		
-		# self.comboBox_selectconfig.currentIndexChanged.connect(self.comboBox_selectconfig_cfgchanged_i)
-		self.comboBox_selectconfig.currentTextChanged.connect(self.comboBox_selectconfig_cfgchanged_t)
-		
-		# fill listview from config file
-		self.comboBox_selectconfig.addItems(lConfigs)
-		self.comboBox_selectconfig.setCurrentText(startconfig)
 
-		self.player.error.connect(lambda err: print(f"<E> Player Error: {self.player.errorString()} (Code: {err})"))
-		
 	def slot_modechanged(self, obj, checked):
 		# 'checked' ist True für den neu aktivierten Button
 		if not checked:
