@@ -403,6 +403,8 @@ class MainWindow(QtWidgets.QDialog):
 		# fill listview from config file
 		self.comboBox_selectconfig.addItems(lConfigs)
 		self.comboBox_selectconfig.setCurrentText(startconfig)
+
+		self.player.error.connect(lambda err: print(f"<E> Player Error: {self.player.errorString()} (Code: {err})"))
 		
 	def slot_modechanged(self, obj, checked):
 		# 'checked' ist True für den neu aktivierten Button
@@ -607,10 +609,16 @@ class MainWindow(QtWidgets.QDialog):
 
 		# 1. MP4 / Video-Handling
 		if current_file.lower().endswith('.mp4'):
+			# Videoausgabe auf das Video-Widget leiten
+			self.player.setVideoOutput(self.widget_videooutput)
+			# Auf Video-Seite im StackedWidget umschalten (Index 1)
 			self.stackedWidget.setCurrentIndex(1)
+			self.statusBar.showMessage(f"playing video: {os.path.basename(current_file)}")
+			self.savePlaylistState(self.playlist, self.randomplaylist)
 			return
 
-		# 2. Standard MP3 Handling
+		# 2. Standard MP3-Handling
+		# Videoausgabe wieder lösen / zurück zur Cover-Ansicht (Index 0)
 		self.stackedWidget.setCurrentIndex(0)
 		
 		try:
