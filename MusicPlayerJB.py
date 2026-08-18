@@ -1,40 +1,42 @@
 # Standard library imports
-import sys
-import os
-import re
-import subprocess
 import glob
+import os
 import random
+import re
 import shutil
-from subprocess import Popen, PIPE, STDOUT
-from pathlib import Path
 import sqlite3
+import subprocess
+import sys
+from subprocess import Popen, PIPE, STDOUT
+from functools import partial
+from pathlib import Path
+# from typing import NamedTuple
 
 # PyQt imports
 from PyQt5 import QtWidgets, uic
+from PyQt5.QtCore import (
+	Qt, QUrl, QSortFilterProxyModel, QPoint, QAbstractTableModel,
+	pyqtRemoveInputHook # see comment below
+)
 from PyQt5.QtWidgets import (
 	QAction, QApplication, QLabel, QMainWindow, QMenu, QDialog, QFileDialog,
 	QStatusBar, QPushButton, QGridLayout, QScrollArea, QWidget, QVBoxLayout,
-	QDialogButtonBox, QMessageBox, QTableView, QTabWidget, 
+	QDialogButtonBox, QMessageBox, QTableView, QTabWidget, QStackedWidget,
 	QComboBox, QWidgetAction, QCheckBox, QListWidget, QListWidgetItem, QHBoxLayout, QLineEdit
 )
-from PyQt5.QtCore import Qt, QUrl, QSortFilterProxyModel, QPoint
-from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent, QMediaPlaylist, QMediaMetaData
-from PyQt5.QtCore import pyqtRemoveInputHook # see comment below
-from PyQt5.QtGui import QPixmap, QIcon
-from PyQt5.QtCore import QAbstractTableModel
-from PyQt5.QtWidgets import QStackedWidget
+from PyQt5.QtMultimedia import (
+	QMediaPlayer, QMediaContent, QMediaPlaylist, QMediaMetaData
+)
+from PyQt5.QtGui import (
+	QPixmap, QIcon
+)
 
 # Third-party library imports
 import mutagen
+from mutagen.easyid3 import EasyID3
+from mutagen.id3 import ID3, APIC
 from mutagen.mp3 import MP3, MPEGInfo
 from mutagen.mp4 import MP4
-from mutagen.id3 import ID3, APIC
-from mutagen.easyid3 import EasyID3
-
-# Local imports
-from functools import partial
-# from typing import NamedTuple
 
 bDebug = True
 bDebugSQL = False
