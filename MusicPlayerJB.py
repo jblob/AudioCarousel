@@ -10,6 +10,8 @@ import sys
 from subprocess import Popen, PIPE, STDOUT
 from functools import partial
 from pathlib import Path
+from dataclasses import dataclass
+from pprint import pprint
 # from typing import NamedTuple
 
 # PyQt imports
@@ -307,7 +309,7 @@ class TableModel(QAbstractTableModel):
 	def __init__(self, data, headers):
 		super().__init__()
 		self._data = data
-		self._headers = headers  # Column headers
+		self._headers = headers	 # Column headers
 		
 	def data(self, index, role):
 		if role == Qt.DisplayRole:
@@ -333,20 +335,16 @@ class TableModel(QAbstractTableModel):
 				return str(section + 1)
 
 class MainWindow(QtWidgets.QDialog):
-	def __init__(self, configs, lConfigs, startconfig):
+	def __init__(self):
 		super(MainWindow, self).__init__()
 		self.COVER_SIZE = 150
 		uic.loadUi('MusicPlayerJB.ui', self)
 #?		self.setFixedSize(1400,810)
 		self.label_cover.setFixedSize(self.COVER_SIZE, self.COVER_SIZE)
 		
-		self.configs = configs
-		self.lConfigs = lConfigs
+		self.config = ConfigManager('configs.cfg')
 		
-		self.curConfig      = startconfig
-		self.db             = DB(self.configs.dCfgDbname[startconfig])
-		self.randomplaylist = self.configs.dCfgRandomplaylist[startconfig]
-		self.sounddir       = self.configs.dCfgSounddir[startconfig]
+		self.db				= None
 		
 		self.player_mode = self.buttonGroup.checkedButton().text() ### 'AlbumPlayer' # TODO: read this from config ?
 		self.bAlbumSelected = False
@@ -361,7 +359,7 @@ class MainWindow(QtWidgets.QDialog):
 		
 
 		pyqtRemoveInputHook() # otherwise no debugging with pdb possible :/
-#		self.randomplayliststate = self.getPlaylistSavedState(self.randomplaylist)
+#		self.randomplayliststate = self.getPlaylistSavedState(self.config.active_profile.randomplaylist)
 		self.label_cover.setStyleSheet('background-color: white;')
 
 		# connect signals and slots
@@ -371,14 +369,14 @@ class MainWindow(QtWidgets.QDialog):
 		self.verticalLayout_statusbar.addWidget(self.statusBar)
 		self.statusBar.showMessage('------------------------------------')
 		
-		self.updateListViews()
+		self.comboBox_selectconfig.blockSignals(True)
+		self.comboBox_selectconfig.clear()
+		self.comboBox_selectconfig.addItems(list(self.config.profiles.keys()))
+		self.comboBox_selectconfig.setCurrentText(self.config.defaultconfig)
+		self.comboBox_selectconfig.blockSignals(False)
 		
-		# self.comboBox_selectconfig.currentIndexChanged.connect(self.comboBox_selectconfig_cfgchanged_i)
-		self.comboBox_selectconfig.currentTextChanged.connect(self.comboBox_selectconfig_cfgchanged_t)
-		
-		# fill listview from config file
-		self.comboBox_selectconfig.addItems(lConfigs)
-		self.comboBox_selectconfig.setCurrentText(startconfig)
+		# load start config
+		self.on_config_changed(self.config.defaultconfig)
 		
 	def connectSignalsAndSlots(self):
 		self.pushButton_randomplaylist_play.clicked.connect(self.pushButton_randomplaylist_play_run)
@@ -400,6 +398,33 @@ class MainWindow(QtWidgets.QDialog):
 		self.player.error.connect(lambda err: print(f"<E> Player Error: {self.player.errorString()} (Code: {err})"))
 		self.playlist.currentIndexChanged.connect(self.slotIndexChanged)
 		self.playlist.currentMediaChanged.connect(self.slotMetaDataChanged)
+		self.comboBox_selectconfig.currentTextChanged.connect(self.on_config_changed) # change config "on the fly"
+		
+	def on_config_changed(self, profile_name):
+		"""Wird aufgerufen, sobald der Benutzer in der ComboBox ein anderes Profil wählt."""
+		if not profile_name or profile_name not in self.config.profiles:
+			return
+
+		# 1. Aktive config im ConfigManager setzen
+		self.config.activeProfile = profile_name
+		prof = self.config.active_profile
+
+		# 2. Alte DB-Verbindung sicher schließen (falls vorhanden)
+		if hasattr(self, 'db') and self.db and hasattr(self.db, 'conn') and self.db.conn:
+			try:
+				self.db.conn.close()
+			except Exception:
+				pass
+
+		# 3. Neue DB mit den Pfaden des neuen Profils öffnen
+		self.db = DB(prof.dbname)
+
+		# 4. GUI-Listen/Auswahlfelder (Genres, Artists) neu aus der neuen DB befüllen
+		self.updateListViews()
+
+		if bDebug:
+			print(f'<MainWindow> Config erfolgreich auf "{prof.name}" gewechselt.')
+			print(f'			 DB: {prof.dbname} | SoundDir: {prof.sounddir}')
 
 	def slot_modechanged(self, obj, checked):
 		# 'checked' ist True für den neu aktivierten Button
@@ -407,6 +432,8 @@ class MainWindow(QtWidgets.QDialog):
 			return
 
 		self.player_mode = obj.text()
+		if bDebug:
+			print('<slot_modechanged>mode changed to: ' + self.player_mode)
 
 		if self.player_mode == 'RandomPlayer':
 			# 1. Aktuelles Album / Player stoppen
@@ -414,7 +441,7 @@ class MainWindow(QtWidgets.QDialog):
 
 			# 2. Random-Playlist neu aus Datei laden & Signal-Verbindung erhalten
 			self.playlist.clear()
-			random_pl = Utils.load_playlist_from_file(self.randomplaylist)
+			random_pl = Utils.load_playlist_from_file(self.config.active_profile.randomplaylist)
 			for i in range(random_pl.mediaCount()):
 				self.playlist.addMedia(random_pl.media(i))
 
@@ -423,7 +450,7 @@ class MainWindow(QtWidgets.QDialog):
 				self.player.setPlaylist(self.playlist)
 
 			# 4. Gespeicherten Index abrufen und starten
-			saved_idx = self.getPlaylistSavedState(self.randomplaylist)
+			saved_idx = self.getPlaylistSavedState(self.config.active_profile.randomplaylist)
 			if saved_idx >= self.playlist.mediaCount() or saved_idx < 0:
 				saved_idx = 0
 
@@ -453,11 +480,11 @@ class MainWindow(QtWidgets.QDialog):
 				# load playlist only when it is empty or has been regenerated
 				if self.playlist.mediaCount() == 0 or self.bPlaylistChanged:
 					self.playlist.clear()
-					self.playlist = Utils.load_playlist_from_file(self.randomplaylist)
+					self.playlist = Utils.load_playlist_from_file(self.config.active_profile.randomplaylist)
 					
 					self.listWidget_randomplaylist.clear()
-					if os.path.exists(self.randomplaylist):
-						with open(self.randomplaylist, 'r') as fin:
+					if os.path.exists(self.config.active_profile.randomplaylist):
+						with open(self.config.active_profile.randomplaylist, 'r') as fin:
 							for line in fin:
 								if line.strip():
 									self.listWidget_randomplaylist.addItem(line.strip())
@@ -467,7 +494,7 @@ class MainWindow(QtWidgets.QDialog):
 					self.player.setPlaylist(self.playlist)
 
 				# Index aus dem gespeicherten Zustand holen
-				saved_idx = self.getPlaylistSavedState(self.randomplaylist)
+				saved_idx = self.getPlaylistSavedState(self.config.active_profile.randomplaylist)
 				# Absicherung gegen -1 oder Out-of-Bounds
 				if saved_idx >= self.playlist.mediaCount() or saved_idx < 0:
 					saved_idx = 0
@@ -491,7 +518,7 @@ class MainWindow(QtWidgets.QDialog):
 		if self.player.state() == QMediaPlayer.PlayingState:
 			if self.player_mode == 'AlbumPlayer':
 				self.player.stop()
-				self.load_playlist_from_file(self.randomplaylist, self.playlist)
+				self.load_playlist_from_file(self.config.active_profile.randomplaylist, self.playlist)
 				# play playlist
 				self.player.setPlaylist(self.playlist)
 				self.player.play()
@@ -503,8 +530,8 @@ class MainWindow(QtWidgets.QDialog):
 			self.listWidget_randomplaylist.clear()
 
 			# load playlist
-			self.load_playlist_from_file(self.randomplaylist, self.playlist)
-			with open(self.randomplaylist, 'r') as fin:
+			self.load_playlist_from_file(self.config.active_profile.randomplaylist, self.playlist)
+			with open(self.config.active_profile.randomplaylist, 'r') as fin:
 				lines = fin.readlines()
 				fin.close()
 				for _line in lines:
@@ -522,19 +549,19 @@ class MainWindow(QtWidgets.QDialog):
 		plgen = PlaylistGenerator()
 		### old implementation with dialog -> now changed to read from config
 		# d = QFileDialog.getExistingDirectory(self, 'select Music Directory', '.', QFileDialog.Option.ShowDirsOnly)
-		# plgen.genCompletePlaylistFromDirectory(d, self.randomplaylist, True)
+		# plgen.genCompletePlaylistFromDirectory(d, self.config.active_profile.randomplaylist, True)
 
-		#plgen.genCompletePlaylistFromDirectory(self.sounddir, self.randomplaylist, True)
+		#plgen.genCompletePlaylistFromDirectory(self.config.active_profile, self.config.active_profile.randomplaylist, True)
 
-		plgen.genPlaylistFromDatabase(self.sounddir, self.randomplaylist, True, self.db.dbname)
+		plgen.genPlaylistFromDatabase(self.config.active_profile.sounddir, self.config.active_profile.randomplaylist, True, self.db.dbname)
 
 		self.playlist.setCurrentIndex(0)
-		self.savePlaylistState(self.playlist, self.randomplaylist)
+		self.savePlaylistState(self.playlist, self.config.active_profile.randomplaylist)
 		self.bPlaylistChanged = True
 		
 	def pushButton_randomplaylist_stop_run(self):
 		self.player.stop()
-		self.savePlaylistState(self.playlist, self.randomplaylist)
+		self.savePlaylistState(self.playlist, self.config.active_profile.randomplaylist)
 		
 	def pushButton_randomplaylist_pause_run(self):
 		if self.player.state() == QMediaPlayer.PlayingState:
@@ -550,7 +577,7 @@ class MainWindow(QtWidgets.QDialog):
 			self.playlist.setCurrentIndex(self.playlist.mediaCount()-1)
 		else:
 			self.playlist.previous()
-		self.savePlaylistState(self.playlist, self.randomplaylist)
+		self.savePlaylistState(self.playlist, self.config.active_profile.randomplaylist)
 		  
 	def pushButton_randomplaylist_next_run(self):
 		# method for moving to next track
@@ -558,7 +585,7 @@ class MainWindow(QtWidgets.QDialog):
 		if self.playlist.currentIndex() == -1:
 			self.playlist.setCurrentIndex(0)
 			self.player.play()
-		self.savePlaylistState(self.playlist, self.randomplaylist)
+		self.savePlaylistState(self.playlist, self.config.active_profile.randomplaylist)
 
 	def savePlaylistState(self, playlist, playlistfile):
 		if playlistfile == '': 
@@ -609,7 +636,7 @@ class MainWindow(QtWidgets.QDialog):
 			# Auf Video-Seite im StackedWidget umschalten (Index 1)
 			self.stackedWidget.setCurrentIndex(1)
 			self.statusBar.showMessage(f"playing video: {os.path.basename(current_file)}")
-			self.savePlaylistState(self.playlist, self.randomplaylist)
+			self.savePlaylistState(self.playlist, self.config.active_profile.randomplaylist)
 			return
 
 		# 2. Standard MP3-Handling
@@ -650,23 +677,22 @@ class MainWindow(QtWidgets.QDialog):
 			print(f"<E> Fehler beim Laden des Covers: {e}")
 			self.label_cover.clear()
 			
-		self.savePlaylistState(self.playlist, self.randomplaylist)
-
+		self.savePlaylistState(self.playlist, self.config.active_profile.randomplaylist)
 	
 	def slotIndexChanged(self):
 		idx = self.playlist.currentIndex()
 		if idx >= 0:
 			self.listWidget_randomplaylist.setCurrentRow(idx)
-			self.savePlaylistState(self.playlist, self.randomplaylist)
+			self.savePlaylistState(self.playlist, self.config.active_profile.randomplaylist)
 
 	def closeEvent(self, event):
-		self.savePlaylistState(self.playlist, self.randomplaylist)
+		self.savePlaylistState(self.playlist, self.config.active_profile.randomplaylist)
 		self.db.conn.close()
 	
 	def pushButton_database_updateDB_run(self):
 		# Thread filling the DB
 		lAllAlbums = []
-		files = glob.glob(self.sounddir + '/**/*.mp?', recursive=True) ### mp4 not supported by mutagen :( -> TODO: search for another lib
+		files = glob.glob(self.config.active_profile.sounddir + '/**/*.mp?', recursive=True) ### mp4 not supported by mutagen :( -> TODO: search for another lib
 		nFilesToProceed = len(files) # for progress bar
 		self.db.createTables()
 		error_log = []
@@ -811,33 +837,20 @@ class MainWindow(QtWidgets.QDialog):
 		self.textBrowser_testsqlquery.setText(res)
 		
 	def pushButton_albumplayer_playalbum_run(self):
-		self.apd = AlbumPlayerDlg(self)  # Pass MainWindow instance
+		self.apd = AlbumPlayerDlg(self)	 # Pass MainWindow instance
 		# self.apd.exec_() ### modal dialog
 		self.apd.show() ### non-modal dialog
 		self.bAlbumSelected = True
-		
-	# def comboBox_selectconfig_cfgchanged_i(self, value):
-		# if bDebug:
-			# print('<comboBox_selectconfig_cfgchanged_i>' + str(value))
-		
-	def comboBox_selectconfig_cfgchanged_t(self, value):
-		if bDebug:
-			print('<comboBox_selectconfig_cfgchanged_t>' + value)
-		self.curConfig      = value
-		self.db             = DB(self.configs.dCfgDbname[value])
-		self.randomplaylist = self.configs.dCfgRandomplaylist[value]
-		self.sounddir       = self.configs.dCfgSounddir[value]
-		self.updateListViews()
 		
 	def pushButton_config_editconfig_run(self):
 		self.dlg = QDialog(self)
 		uic.loadUi('Dlg_editConfig.ui', self.dlg)
 		self.dlg.lineEdit_configname.setReadOnly(True)
 		self.dlg.buttonBox_okcancel.clicked.connect(self.buttonBox_okcancel_run)
-		self.dlg.lineEdit_configname.setText(self.curConfig)
-		self.dlg.lineEdit_database.setText(self.configs.dCfgDbname[self.curConfig])
-		self.dlg.lineEdit_sounddir.setText(self.sounddir)
-		self.dlg.lineEdit_randomplaylist.setText(self.randomplaylist)
+		self.dlg.lineEdit_configname.setText(self.config.active_profile.name)
+		self.dlg.lineEdit_database.setText(self.config.active_profile.dbname)
+		self.dlg.lineEdit_sounddir.setText(self.config.active_profile.sounddir)
+		self.dlg.lineEdit_randomplaylist.setText(self.config.active_profile.randomplaylist)
 		self.dlg.exec_()
 		
 	def pushButton_config_newconfig_run(self):
@@ -851,7 +864,7 @@ class MainWindow(QtWidgets.QDialog):
 		self.dlg.exec_()
 		
 	def pushButton_config_deleteconfig_run(self):
-		if len(self.lConfigs) < 2:
+		if len(self.config.profiles) < 2:
 			msg = QMessageBox()
 			msg.setIcon(QMessageBox.Icon.Warning)
 			msg.setText('Cannot delete Config since no other config is available')
@@ -859,56 +872,47 @@ class MainWindow(QtWidgets.QDialog):
 			msg.setStandardButtons(QMessageBox.StandardButton.Ok)
 			msg.exec()
 		else:
-			if self.curConfig == self.configs.defaultconfig:
-				bChangeDefaultConfig = True
-			else:
-				bChangeDefaultConfig = False
-			self.lConfigs.remove(self.curConfig)
-			self.curConfig = self.lConfigs[0]
+			self.config.delete_profile(self.config.active_profile.name)
 			self.comboBox_selectconfig.removeItem(self.comboBox_selectconfig.currentIndex())
-			self.comboBox_selectconfig.setCurrentText(self.curConfig)
-			if bChangeDefaultConfig:
-				self.configs.defaultconfig = self.curConfig
-			self.configs.saveConfigfile(True)
+
+			self.comboBox_selectconfig.setCurrentText(self.config.active_profile)
+			# self.configs.saveConfigfile(True)
 		
 	def pushButton_config_setasdefault_run(self):
-		self.configs.defaultconfig = self.comboBox_selectconfig.currentText()
-		self.configs.saveConfigfile()
+		self.config.defaultconfig = self.config.active_profile
+		self.config.saveConfigfile()
 	
 	def buttonBox_okcancel_run(self, button):
 		role = self.dlg.buttonBox_okcancel.standardButton(button)
 		if role == QDialogButtonBox.Ok:
-			self.configs.dCfgDbname[self.curConfig] = self.dlg.lineEdit_database.text()
-			self.configs.dCfgSounddir[self.curConfig] = self.dlg.lineEdit_sounddir.text()
-			self.configs.dCfgRandomplaylist[self.curConfig] = self.dlg.lineEdit_randomplaylist.text()
-			self.configs.saveConfigfile()
-			#self.comboBox_selectconfig_cfgchanged_t(0)
+			prof = self.config.active_profile
+			prof.dbname = self.dlg.lineEdit_database.text()
+			prof.sounddir = self.dlg.lineEdit_sounddir.text()
+			prof.randomplaylist = self.dlg.lineEdit_randomplaylist.text()
+			self.config.saveConfigfile()
+			self.on_config_changed(prof.name)
 
 	def buttonBox_okcancel2_run(self, button):
 		role = self.dlg.buttonBox_okcancel.standardButton(button)
 		if role == QDialogButtonBox.Ok:
-			cur_config = self.dlg.lineEdit_configname.text()
-			self.configs.dCfgDbname[cur_config] = self.dlg.lineEdit_database.text()
-			self.configs.dCfgSounddir[cur_config] = self.dlg.lineEdit_sounddir.text()
-			self.configs.dCfgRandomplaylist[cur_config] = self.dlg.lineEdit_randomplaylist.text()
-			# TODO: check if values are plausible
-			if cur_config in self.lConfigs:
-				print('config already exists: ' + cur_config + ' -> skipped')
+			new_name = self.dlg.lineEdit_configname.text().strip()
+			if new_name in self.config.profiles:
+				print(f'Config {new_name} already exists')
 				return
-			elif os.path.exists(self.configs.dCfgDbname[cur_config]):
-				print('DB already exists: ' + self.configs.dCfgDbname[cur_config] + ' -> skipped')
-				return
-			elif not os.path.exists(self.configs.dCfgSounddir[cur_config]):
-				print('Sound directory not found: ' + self.configs.dCfgSounddir[cur_config] + ' -> skipped')
-				return
-			elif os.path.exists(self.configs.dCfgRandomplaylist[cur_config]):
-				print('Playlist already exists: ' + self.configs.dCfgRandomplaylist[cur_config] + ' -> skipped')
-				return
-			else:
-				self.lConfigs.append(cur_config)
-				self.configs.saveConfigfile()
-				if bDebug:
-					print ('<config created>' + cur_config)
+				
+			new_profile = Config(
+				name=new_name,
+				dbname=self.dlg.lineEdit_database.text(),
+				sounddir=self.dlg.lineEdit_sounddir.text(),
+				randomplaylist=self.dlg.lineEdit_randomplaylist.text()
+			)
+			
+			self.config.add_or_update_profile(new_profile)
+			self.comboBox_selectconfig.addItem(new_name)
+			self.comboBox_selectconfig.setCurrentText(new_name) # triggers on_config_changed !
+			
+			if bDebug:
+				print ('<config created>' + new_name)
 
 class AlbumPlayerDlg(QDialog):
 	def __init__(self, main_window):
@@ -1252,7 +1256,7 @@ class ExcelFilterHeader(QtWidgets.QHeaderView):
 				cb.setChecked(True)
 				
 			list_widget.setItemWidget(item, cb)
-			checkbox_map[val] = (cb, item)  # <-- Hier das Item mitspeichern!
+			checkbox_map[val] = (cb, item)	# <-- Hier das Item mitspeichern!
 
 		# Suchfeld-Logik: Liste beim Tippen live filtern (Jetzt in O(N) statt O(N²))
 		def filter_list_items(text):
@@ -1381,8 +1385,8 @@ class TabWindow(QMainWindow):
 		table_view1 = QTableView()
 		header1 = ExcelFilterHeader(Qt.Horizontal, dbname, table_view1)
 		table_view1.setHorizontalHeader(header1) # Setze den custom Excel-Header!
-		header1.header_view = header1            # Zirkelbezug herstellen
-		self.proxy_model1.header_view = header1  # Verbindung zum FilterModell herstellen
+		header1.header_view = header1			 # Zirkelbezug herstellen
+		self.proxy_model1.header_view = header1	 # Verbindung zum FilterModell herstellen
 		
 		table_view1.setModel(self.proxy_model1)
 		table_view1.verticalHeader().hide()
@@ -1530,12 +1534,12 @@ class DB:
 		
 		try:
 			self.cursor.execute(sql, (
-				data[1],       # artist
-				data[2],       # albumartist
-				data[3],       # album
-				data[4],       # genre
-				coverpath,     # path to coverart
-				folder_path    # fullpath
+				data[1],	   # artist
+				data[2],	   # albumartist
+				data[3],	   # album
+				data[4],	   # genre
+				coverpath,	   # path to coverart
+				folder_path	   # fullpath
 			))
 		except sqlite3.Error as e:
 			print(f"Fehler bei Album-Insert ({data[3]}): {e}")
@@ -1567,49 +1571,66 @@ class DB:
 		
 	def getColValsFromDB(self, table, colname):
 		retval = []
-		try:
-			sql = 'SELECT ' + colname + ' FROM ' + table
-			self.exec_sql(sql, False)
-			rows = self.cursor.fetchall()
-			for r in rows:
-				if not r[0] in retval:
-					retval.append(r[0])
-			self.conn.close()
-		except:
-			if bDebug:
-				print('<getColValsFromDB>Error: ' + table + 'not found')
+		sql = f"SELECT DISTINCT {colname} FROM {table} WHERE {colname} IS NOT NULL AND {colname} != '' ORDER BY {colname} ASC;"
 		
+		try:
+			# Nutzung eines Kontext-Managers (with), damit die Verbindung/der Cursor sauber verwaltet wird
+			with sqlite3.connect(self.dbname) as conn:
+				cursor = conn.cursor()
+				cursor.execute(sql)
+				rows = cursor.fetchall()
+				# Flache Liste aus den Ergebnissen erstellen
+				retval = [r[0] for r in rows if r[0]]
+		except sqlite3.Error as e:
+			if bDebug:
+				print(f'<getColValsFromDB> Fehler bei Tabelle {table}, Spalte {colname}: {e}')
+				
 		if bDebug:
-			print('<getColValsFromDB>' + str(retval))
+			print(f'<getColValsFromDB> {table}.{colname} -> {len(retval)} Einträge geladen.')
 			
 		return retval
-		
+	
+@dataclass
 class Config:
-	def __init__(self):
+	name: str
+	dbname: str
+	sounddir: str
+	randomplaylist: str
+	
+class ConfigManager:
+	def __init__(self, configfile='configs.cfg'):
 		# default values for test
 		# if os.name == 'posix':
-			# self.dbname         = 'sound.linux.db'
-			# self.sounddir       = os.path.join('home', 'blju', 'Sound')
-			# self.randomplaylist = 'playlist_random_cur_linux.m3u' 
+			# self.dbname		  = 'sound.linux.db'
+			# self.config.active_profile.sounddir		= os.path.join('home', 'blju', 'Sound')
+			# self.config.active_profile.randomplaylist = 'playlist_random_cur_linux.m3u' 
 		# else:
-			# self.dbname         = 'sound.windows.db'
-			# self.sounddir       = os.path.join('E:\\', '000_2025', 'MusicManager_sync_workspaces', 'MusicMgr', 'Sound')
-			# self.randomplaylist = 'playlist_random_cur_windows.m3u'
-		self.configfile = 'configs.cfg'
-		self.lConfigs = []
-		self.dCfgDbname = {}
-		self.dCfgSounddir = {}
-		self.dCfgRandomplaylist = {}
-		self.defaultconfig = ''
+			# self.dbname		  = 'sound.windows.db'
+			# self.config.active_profile.sounddir		= os.path.join('E:\\', '000_2025', 'MusicManager_sync_workspaces', 'MusicMgr', 'Sound')
+			# self.config.active_profile.randomplaylist = 'playlist_random_cur_windows.m3u'
+		self.configfile = configfile
+		self.profiles = {}	# Dict im Format: {"Profilname": Config(...)}
+		self.defaultConfig = ''
+		self.activeProfile = ''
+		self.readConfigfile()
+		
+	@property
+	def active_profile(self) -> Config:
+		return self.profiles.get(self.activeProfile)
 		
 	def readConfigfile(self):
+		self.profiles.clear()
 		
+		if not os.path.exists(self.configfile):
+			return
+			
 		with open(self.configfile, 'r') as fin:
 			lines = fin.readlines()
 			fin.close()
+			
 		for l in lines:
 			match0 = re.search(r'<defaultconfig>\s*(.+)\s*</defaultconfig>', l)
-			match1 = re.search(r'<config>', l)
+			# match1 = re.search(r'<config>', l)
 			match2 = re.search(r'<name>\s*(.+)\s*</name>', l)
 			match3 = re.search(r'<dbname>\s*(.+)\s*</dbname>', l)
 			match4 = re.search(r'<sounddir>\s*(.+)\s*</sounddir>', l)
@@ -1617,42 +1638,53 @@ class Config:
 			match6 = re.search(r'</config>', l)
 			if match0:
 				self.defaultconfig = match0.group(1)
-			elif match1:
-				bConfigSectionActive = True
 			elif match2:
 				cur_config = match2.group(1)
-				self.lConfigs.append(cur_config)
 			elif match3:
-				self.dCfgDbname[cur_config] = match3.group(1)
+				m_dbname = match3.group(1)
 			elif match4:
-				self.dCfgSounddir[cur_config] = match4.group(1)
+				m_sounddir = match4.group(1)
 			elif match5:
-				self.dCfgRandomplaylist[cur_config] = match5.group(1)
+				m_randomplaylist = match5.group(1)
 			elif match6:
-				bConfigSectionActive = False
-				# config = ConfigItem(cur_config, cfg_dbname, cfg_sounddir, cfg_randomplaylist)
-				# dConfigs.append(config)
-		return self.lConfigs, self.defaultconfig
-		
+				if cur_config:
+					self.profiles[cur_config] = Config(cur_config, m_dbname, m_sounddir, m_randomplaylist)
+			
+			# Falls kein aktives Profil gewählt wurde, nimm das Standardprofil
+			if not self.activeProfile:
+				self.activeProfile = self.defaultconfig
+				
 	def saveConfigfile(self, bWithBackup = False):
-	# def saveConfigfile(self, defaultconfig, lConfigs):
 		if bWithBackup:
+			os.makedirs('bkup', exist_ok=True)
 			backupfile = os.path.join('bkup', self.configfile + '.bkup')
 			shutil.copyfile(self.configfile, backupfile)
-		text = ''
-		text += '<defaultconfig>' + self.defaultconfig + '</defaultconfig>\n\n'
-		for cfg in self.lConfigs:
+			
+		text = f'<defaultconfig>{self.defaultconfig}</defaultconfig>\n\n'
+		for name, prof in self.profiles.items():
 			text += '<config>\n'
-			text += '<name>' + cfg + '</name>\n'
-			text += '<dbname>' + self.dCfgDbname[cfg] + '</dbname>\n'
-			text += '<sounddir>' + self.dCfgSounddir[cfg] + '</sounddir>\n'
-			text += '<randomplaylist>' + self.dCfgRandomplaylist[cfg] + '</randomplaylist>\n'
+			text += f'<name>{prof.name}</name>\n'
+			text += f'<dbname>{prof.dbname}</dbname>\n'
+			text += f'<sounddir>{prof.sounddir}</sounddir>\n'
+			text += f'<randomplaylist>{prof.randomplaylist}</randomplaylist>\n'
 			text += '</config>\n\n'
 		
 		fout = open(self.configfile, 'w')
 		fout.write(text)
 		fout.close()
 
+	def add_or_update_profile(self, profile: Config):
+		self.profiles[profile.name] = profile
+		self.saveConfigfile()
+
+	def delete_profile(self, profile_name: str):
+		if profile_name in self.profiles:
+			del self.profiles[profile_name]
+			# if we delete the default config, set another one as default
+			if self.defaultconfig == profile_name and self.profiles:
+				self.defaultconfig = next(iter(self.profiles.keys()))
+			self.saveConfigfile(bWithBackup=True)
+			
 class Utils:
 	def __init__(self):
 		pass
@@ -1676,9 +1708,7 @@ class Utils:
 
 if __name__ == '__main__':
 	app = QtWidgets.QApplication(sys.argv)
-	conf = Config()
-	lConfigs, defaultconfig = conf.readConfigfile()
-	window = MainWindow(conf, lConfigs, defaultconfig)
+	window = MainWindow()
 	window.show()
 	sys.exit(app.exec_())
 
