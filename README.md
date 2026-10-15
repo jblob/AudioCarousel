@@ -57,6 +57,9 @@ This project is open-source. Feel free to use, modify, and distribute it.
 
 ## Features
 *   **Random Player Mode**
+*   A playlist with all available titles is generated with titles in random order. When playing is stopped and continued at a later point (even after shutdown) it continues with the last played title.
+*   This feature was implemented for users who want to hear their complete music collection in random order.
+*   Note: when adding new titles to the Database (via "Update Database) the playlist is not updated. Currently the only solution is to regenerate the random playlist.
  
 *   **Album Player Mode** 
 
